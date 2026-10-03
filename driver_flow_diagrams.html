@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AIoT 驱动流程图 — I2C · I2S · SPI</title>
+<style>
+  :root {
+    --bg:#f6f8fa; --card:#fff; --text:#1a1a2e; --t2:#555; --border:#e0e0e0;
+    --i2c:#00bcd4; --i2c2:#0097a7; --i2s:#e91e63; --i2s2:#c2185b; --spi:#ff9800; --spi2:#e65100;
+    --green:#27ae60; --red:#e74c3c; --blue:#2196f3; --purple:#9b59b6;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    background:var(--bg); color:var(--text); padding:20px; line-height:1.5;
+  }
+  .container{max-width:1500px; margin:0 auto}
+  h1{text-align:center; font-size:26px; margin-bottom:4px}
+  .sub{text-align:center; font-size:13px; color:var(--t2); margin-bottom:24px}
+  .section{
+    background:var(--card); border-radius:12px; padding:22px 26px; margin-bottom:20px;
+    box-shadow:0 1px 3px rgba(0,0,0,0.06); overflow-x:auto;
+  }
+  .section h2{font-size:17px; margin-bottom:16px; padding-bottom:8px; border-bottom:2px solid var(--border); display:flex; align-items:center; gap:8px}
+  svg{display:block; margin:0 auto}
+
+  .grid-2{display:grid; grid-template-columns:1fr 1fr; gap:20px}
+  .grid-3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px}
+  @media(max-width:1100px){.grid-2,.grid-3{grid-template-columns:1fr}}
+
+  table{width:100%; border-collapse:collapse; font-size:12.5px}
+  th{background:#f8f9fa; padding:8px 12px; text-align:left; font-weight:600; border-bottom:2px solid var(--border)}
+  td{padding:6px 12px; border-bottom:1px solid var(--border); vertical-align:top}
+  tr:hover td{background:#fafbfc}
+  code{font-family:"SF Mono","Cascadia Code","Consolas",monospace; font-size:11px; background:#f0f0f0; padding:1px 5px; border-radius:3px}
+  .pin{display:inline-block; padding:1px 6px; border-radius:3px; font-size:10px; font-weight:700; font-family:monospace}
+  .pin-g{background:#e8f5e9;color:#1b5e20}
+  .pin-b{background:#e0f7fa;color:#006064}
+  .pin-p{background:#fce4ec;color:#880e4f}
+  .pin-o{background:#fff3e0;color:#e65100}
+
+  .callout{
+    background:#fffbf0; border-left:3px solid #f39c12; padding:10px 14px;
+    border-radius:0 6px 6px 0; font-size:12px; margin:8px 0; color:#7d6608;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>🔌 AIoT 驱动流程图 — I2C · I2S · SPI</h1>
+<p class="sub">ESP32-S3 · ESP-IDF v5.1.2 · 外设驱动架构</p>
+
+<!-- ==================== 1. I2C OVERVIEW ==================== -->
+<div class="section">
+  <h2>📟 一、I2C 总线拓扑 & 设备树</h2>
+  <svg viewBox="0 0 1480 420" width="100%" height="100%" style="max-height:420px">
+    <defs>
+      <filter id="sh"><feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#00000010"/></filter>
+      <marker id="ar" markerWidth="9" markerHeight="7" refX="9" refY="3.5" orient="auto"><path d="M0,0 L9,3.5 L0,7 Z" fill="#555"/></marker>
+      <marker id="ad" markerWidth="7" markerHeight="9" refX="3.5" refY="9" orient="auto"><path d="M0,0 L7,0 L3.5,9 Z" fill="#555"/></marker>
+    </defs>
+
+    <!-- ESP32-S3 -->
+    <rect x="560" y="15" width="360" height="70" rx="14" fill="#f8fafc" stroke="#2c3e50" stroke-width="2.5" filter="url(#sh)"/>
+    <text x="740" y="42" text-anchor="middle" font-size="16" font-weight="800" fill="#2c3e50">ESP32-S3 I2C 控制器</text>
+    <text x="740" y="62" text-anchor="middle" font-size="11" fill="#888">2 路独立 I2C 主机 · 标准模式 100kHz / 快速模式 400kHz</text>
+
+    <!-- I2C Bus 0 -->
+    <rect x="30" y="115" width="590" height="120" rx="12" fill="#f0fafa" stroke="#00bcd4" stroke-width="2"/>
+    <text x="325" y="142" text-anchor="middle" font-size="15" font-weight="800" fill="#006064">I2C_NUM_0 — 传感器总线 (100kHz 标准模式)</text>
+
+    <rect x="45" y="155" width="115" height="65" rx="8" fill="white" stroke="#00bcd4" stroke-width="1.2" filter="url(#sh)"/>
+    <text x="102" y="178" text-anchor="middle" font-size="12" font-weight="700" fill="#006064">☀️ BH1750</text>
+    <text x="102" y="195" text-anchor="middle" font-size="10" fill="#555">环境光传感器</text>
+    <text x="102" y="212" text-anchor="middle" font-size="10" fill="#888">0x23 (ADDR=GND)</text>
+
+    <rect x="175" y="155" width="115" height="65" rx="8" fill="white" stroke="#00bcd4" stroke-width="1.2" filter="url(#sh)"/>
+    <text x="232" y="178" text-anchor="middle" font-size="12" font-weight="700" fill="#006064">🌫️ SGP30</text>
+    <text x="232" y="195" text-anchor="middle" font-size="10" fill="#555">TVOC/CO₂ 传感器</text>
+    <text x="232" y="212" text-anchor="middle" font-size="10" fill="#888">0x58 (固定)</text>
+
+    <rect x="305" y="155" width="115" height="65" rx="8" fill="white" stroke="#00bcd4" stroke-width="1.2" filter="url(#sh)"/>
+    <text x="362" y="178" text-anchor="middle" font-size="12" font-weight="700" fill="#006064">👋 APDS9960</text>
+    <text x="362" y="195" text-anchor="middle" font-size="10" fill="#555">手势/接近传感器</text>
+    <text x="362" y="212" text-anchor="middle" font-size="10" fill="#888">0x39 (固定) · INT→GPIO2</text>
+
+    <rect x="435" y="155" width="170" height="65" rx="8" fill="#e0f7fa" stroke="#00bcd4" stroke-width="1"/>
+    <text x="520" y="178" text-anchor="middle" font-size="11" font-weight="700" fill="#006064">🔍 动态总线扫描</text>
+    <text x="520" y="196" text-anchor="middle" font-size="10" fill="#555">启动时扫描地址 1-127</text>
+    <text x="520" y="212" text-anchor="middle" font-size="10" fill="#555">按检测结果条件初始化</text>
+
+    <!-- I2C Bus 1 -->
+    <rect x="660" y="115" width="380" height="120" rx="12" fill="#f5f0f8" stroke="#9b59b6" stroke-width="2"/>
+    <text x="850" y="142" text-anchor="middle" font-size="15" font-weight="800" fill="#6c3483">I2C_NUM_1 — 触摸总线 (400kHz 快速模式)</text>
+
+    <rect x="680" y="155" width="200" height="65" rx="8" fill="white" stroke="#9b59b6" stroke-width="1.2" filter="url(#sh)"/>
+    <text x="780" y="178" text-anchor="middle" font-size="12" font-weight="700" fill="#6c3483">🖱️ FT6336G</text>
+    <text x="780" y="195" text-anchor="middle" font-size="10" fill="#555">电容触摸控制器</text>
+    <text x="780" y="212" text-anchor="middle" font-size="10" fill="#888">0x38 · INT→GPIO18 · RST→GPIO17</text>
+
+    <rect x="895" y="155" width="130" height="65" rx="8" fill="#f4ecf7" stroke="#9b59b6" stroke-width="1"/>
+    <text x="960" y="178" text-anchor="middle" font-size="11" font-weight="700" fill="#6c3483">🔄 硬件复位</text>
+    <text x="960" y="196" text-anchor="middle" font-size="10" fill="#555">RST拉低20ms</text>
+    <text x="960" y="212" text-anchor="middle" font-size="10" fill="#555">→ 拉高等待100ms</text>
+
+    <!-- Bus lines -->
+    <line x1="325" y1="115" x2="325" y2="100" stroke="#00bcd4" stroke-width="2.5"/>
+    <line x1="850" y1="115" x2="850" y2="100" stroke="#9b59b6" stroke-width="2.5"/>
+
+    <!-- ESP32-S3 to buses -->
+    <line x1="590" y1="50" x2="325" y2="100" stroke="#00bcd4" stroke-width="2.5" marker-end="url(#ar)"/>
+    <line x1="740" y1="85" x2="850" y2="100" stroke="#9b59b6" stroke-width="2.5" marker-end="url(#ar)"/>
+
+    <!-- Pin labels -->
+    <text x="460" y="65" font-size="10" fill="#006064">SDA=9</text>
+    <text x="460" y="80" font-size="10" fill="#006064">SCL=8</text>
+    <text x="810" y="65" font-size="10" fill="#6c3483">SDA=6</text>
+    <text x="810" y="80" font-size="10" fill="#6c3483">SCL=7</text>
+
+    <!-- BOTTOM: Read sequence patterns -->
+    <text x="740" y="270" text-anchor="middle" font-size="14" font-weight="800" fill="#888">━━━ 各设备 I2C 读取时序模式 ━━━</text>
+
+    <!-- BH1750 pattern -->
+    <rect x="30" y="288" width="340" height="110" rx="10" fill="#fff" stroke="#00bcd4" stroke-width="1.2" filter="url(#sh)"/>
+    <text x="200" y="310" text-anchor="middle" font-size="12" font-weight="700" fill="#006064">BH1750: 连续高分辨率模式</text>
+    <rect x="50" y="322" width="40" height="22" rx="4" fill="#e0f7fa"/><text x="70" y="337" text-anchor="middle" font-size="8" fill="#006064">START</text>
+    <rect x="96" y="322" width="50" height="22" rx="4" fill="#e0f7fa"/><text x="121" y="337" text-anchor="middle" font-size="8" fill="#006064">0x46+W</text>
+    <rect x="152" y="322" width="50" height="22" rx="4" fill="#e0f7fa"/><text x="177" y="337" text-anchor="middle" font-size="8" fill="#006064">0x10</text>
+    <rect x="208" y="322" width="40" height="22" rx="4" fill="#e0f7fa"/><text x="228" y="337" text-anchor="middle" font-size="8" fill="#006064">STOP</text>
+    <text x="200" y="362" text-anchor="middle" font-size="10" fill="#888">... delay 180ms ...</text>
+    <rect x="50" y="372" width="40" height="22" rx="4" fill="#e0f7fa"/><text x="70" y="387" text-anchor="middle" font-size="8">START</text>
+    <rect x="96" y="372" width="50" height="22" rx="4" fill="#e0f7fa"/><text x="121" y="387" text-anchor="middle" font-size="8">0x46+R</text>
+    <rect x="152" y="372" width="80" height="22" rx="4" fill="#e0f7fa"/><text x="192" y="387" text-anchor="middle" font-size="8">READ 2 bytes</text>
+    <rect x="238" y="372" width="40" height="22" rx="4" fill="#e0f7fa"/><text x="258" y="387" text-anchor="middle" font-size="8">NACK</text>
+    <rect x="284" y="372" width="40" height="22" rx="4" fill="#e0f7fa"/><text x="304" y="387" text-anchor="middle" font-size="8">STOP</text>
+
+    <!-- SGP30 pattern -->
+    <rect x="390" y="288" width="340" height="110" rx="10" fill="#fff" stroke="#00bcd4" stroke-width="1.2" filter="url(#sh)"/>
+    <text x="560" y="310" text-anchor="middle" font-size="12" font-weight="700" fill="#006064">SGP30: 测量读取 (CRC8校验)</text>
+    <rect x="410" y="322" width="40" height="22" rx="4" fill="#e0f7fa"/><text x="430" y="337" text-anchor="middle" font-size="8">START</text>
+    <rect x="456" y="322" width="50" height="22" rx="4" fill="#e0f7fa"/><text x="481" y="337" text-anchor="middle" font-size="8">0xB0+W</text>
+    <rect x="512" y="322" width="50" height="22" rx="4" fill="#e0f7fa"/><text x="537" y="337" text-anchor="middle" font-size="8">0x20 0x08</text>
+    <rect x="568" y="322" width="40" height="22" rx="4" fill="#e0f7fa"/><text x="588" y="337" text-anchor="middle" font-size="8">STOP</text>
+    <text x="560" y="362" text-anchor="middle" font-size="10" fill="#888">... delay 12ms ...</text>
+    <rect x="410" y="372" width="40" height="22" rx="4" fill="#e0f7fa"/><text x="430" y="387" text-anchor="middle" font-size="8">START</text>
+    <rect x="456" y="372" width="50" height="22" rx="4" fill="#e0f7fa"/><text x="481" y="387" text-anchor="middle" font-size="8">0xB0+R</text>
+    <rect x="512" y="372" width="70" height="22" rx="4" fill="#e0f7fa"/><text x="547" y="387" text-anchor="middle" font-size="8">READ 6 bytes</text>
+    <rect x="588" y="372" width="40" height="22" rx="4" fill="#e0f7fa"/><text x="608" y="387" text-anchor="middle" font-size="8">NACK</text>
+    <rect x="634" y="372" width="40" height="22" rx="4" fill="#e0f7fa"/><text x="654" y="387" text-anchor="middle" font-size="8">STOP</text>
+    <text x="560" y="397" text-anchor="middle" font-size="9" fill="#e74c3c">⚠ 每2字节后跟1字节CRC8 → [CO2_H,CO2_L,CRC] [TVOC_H,TVOC_L,CRC]</text>
+
+    <!-- FT6336 pattern -->
+    <rect x="750" y="288" width="380" height="110" rx="10" fill="#fff" stroke="#9b59b6" stroke-width="1.2" filter="url(#sh)"/>
+    <text x="940" y="310" text-anchor="middle" font-size="12" font-weight="700" fill="#6c3483">FT6336: 触摸点读取 (Repeated Start)</text>
+    <rect x="770" y="322" width="40" height="22" rx="4" fill="#f4ecf7"/><text x="790" y="337" text-anchor="middle" font-size="8">START</text>
+    <rect x="816" y="322" width="50" height="22" rx="4" fill="#f4ecf7"/><text x="841" y="337" text-anchor="middle" font-size="8">0x70+W</text>
+    <rect x="872" y="322" width="50" height="22" rx="4" fill="#f4ecf7"/><text x="897" y="337" text-anchor="middle" font-size="8">Reg=0x02</text>
+    <rect x="928" y="322" width="40" height="22" rx="4" fill="#e8daef"/><text x="948" y="337" text-anchor="middle" font-size="8">ReSTART</text>
+    <rect x="974" y="322" width="50" height="22" rx="4" fill="#f4ecf7"/><text x="999" y="337" text-anchor="middle" font-size="8">0x70+R</text>
+    <rect x="1030" y="322" width="60" height="22" rx="4" fill="#f4ecf7"/><text x="1060" y="337" text-anchor="middle" font-size="8">READ 6B</text>
+    <rect x="1096" y="322" width="30" height="22" rx="4" fill="#f4ecf7"/><text x="1111" y="337" text-anchor="middle" font-size="7">NACK</text>
+    <rect x="1102" y="372" width="28" height="22" rx="4" fill="#f4ecf7"/><text x="1116" y="387" text-anchor="middle" font-size="7">STOP</text>
+    <text x="940" y="362" text-anchor="middle" font-size="10" fill="#888">6字节: [状态] [XH] [XL] [YH] [YL] [保留] · 状态=1表示有触摸</text>
+    <text x="940" y="380" text-anchor="middle" font-size="9" fill="#888">X = ((data[1]&0x0F)<<8)|data[2] · Y = ((data[3]&0x0F)<<8)|data[4]</text>
+    <text x="940" y="397" text-anchor="middle" font-size="9" fill="#9b59b6">→ 坐标变换: tp.x = raw_y*4/3 · tp.y = 240 - raw_x*3/4</text>
+  </svg>
+</div>
+
+<!-- ==================== 2. I2C INIT & READ FLOWCHART ==================== -->
+<div class="section">
+  <h2>🔄 二、I2C 初始化与数据读取流程</h2>
+  <svg viewBox="0 0 1480 720" width="100%" height="100%" style="max-height:720px">
+    <defs>
+      <filter id="sh2"><feDropShadow dx="0" dy="1.5" stdDeviation="2" flood-color="#0000000d"/></filter>
+      <marker id="ad2" markerWidth="7" markerHeight="9" refX="3.5" refY="9" orient="auto"><path d="M0,0 L7,0 L3.5,9 Z" fill="#00bcd4"/></marker>
+    </defs>
+
+    <!-- ===== LEFT: I2C Init Flow ===== -->
+    <rect x="10" y="5" width="720" height="705" rx="14" fill="#f5fcf9" stroke="#00bcd4" stroke-width="2"/>
+    <text x="370" y="35" text-anchor="middle" font-size="17" font-weight="800" fill="#006064">📟 I2C 总线初始化 & 传感器发现流程 (app_main)</text>
+
+    <!-- Step boxes -->
+    <rect x="30" y="52" width="300" height="44" rx="8" fill="white" stroke="#00bcd4" stroke-width="1.2" filter="url(#sh2)"/>
+    <text x="180" y="72" text-anchor="middle" font-size="12" font-weight="700" fill="#006064">① i2c_param_config(I2C_NUM_0)</text>
+    <text x="180" y="90" text-anchor="middle" font-size="10" fill="#888">SDA=9 SCL=8 · 100kHz · 上拉使能</text>
+
+    <rect x="30" y="106" width="300" height="44" rx="8" fill="white" stroke="#00bcd4" stroke-width="1.2" filter="url(#sh2)"/>
+    <text x="180" y="126" text-anchor="middle" font-size="12" font-weight="700" fill="#006064">② i2c_driver_install(I2C_NUM_0)</text>
+    <text x="180" y="144" text-anchor="middle" font-size="10" fill="#888">主机模式 · TX/RX缓冲=0(不启用)</text>
+
+    <rect x="30" y="160" width="300" height="44" rx="8" fill="white" stroke="#00bcd4" stroke-width="1.2" filter="url(#sh2)"/>
+    <text x="180" y="180" text-anchor="middle" font-size="12" font-weight="700" fill="#006064">③ DHT11_init() + 启动任务</text>
+    <text x="180" y="198" text-anchor="middle" font-size="10" fill="#888">GPIO38 · 独立1-Wire总线 · 等100ms</text>
+
+    <rect x="30" y="214" width="300" height="60" rx="8" fill="white" stroke="#e74c3c" stroke-width="1.8" filter="url(#sh2)"/>
+    <text x="180" y="236" text-anchor="middle" font-size="12" font-weight="700" fill="#b71c1c">④ I2C 总线扫描 (地址 1-127)</text>
+    <line x1="50" y1="246" x2="310" y2="246" stroke="#fdd" stroke-width="1"/>
+    <text x="180" y="262" text-anchor="middle" font-size="10" fill="#555">for addr=1..126: START→addr+W→STOP→检查ACK</text>
+    <text x="180" y="276" text-anchor="middle" font-size="9" fill="#888">超时: 20ms/地址 · i2c_master_cmd_begin</text>
+
+    <!-- Branch diamond -->
+    <polygon points="370,295 480,325 370,355 260,325" fill="#fef9e7" stroke="#f39c12" stroke-width="1.5"/>
+    <text x="370" y="328" text-anchor="middle" font-size="11" font-weight="700" fill="#7d6608">设备在线?</text>
+
+    <!-- Yes branch -->
+    <rect x="420" y="290" width="300" height="35" rx="6" fill="#e8f8f5" stroke="#1abc9c" stroke-width="1"/>
+    <text x="570" y="312" text-anchor="middle" font-size="11" fill="#0e6655">✅ YES → 条件初始化对应传感器</text>
+
+    <rect x="420" y="335" width="145" height="35" rx="6" fill="white" stroke="#1abc9c" stroke-width="1"/>
+    <text x="492" y="356" text-anchor="middle" font-size="10" fill="#0e6655">0x23/0x5C → BH1750</text>
+    <rect x="575" y="335" width="145" height="35" rx="6" fill="white" stroke="#1abc9c" stroke-width="1"/>
+    <text x="647" y="356" text-anchor="middle" font-size="10" fill="#0e6655">0x58 → SGP30+NVS基线</text>
+
+    <rect x="420" y="380" width="300" height="35" rx="6" fill="white" stroke="#1abc9c" stroke-width="1"/>
+    <text x="570" y="402" text-anchor="middle" font-size="10" fill="#0e6655">0x39 → APDS9960 (手势+中断GPIO2)</text>
+
+    <!-- No branch -->
+    <rect x="260" y="435" width="220" height="35" rx="6" fill="#ffebee" stroke="#e74c3c" stroke-width="1"/>
+    <text x="370" y="457" text-anchor="middle" font-size="11" fill="#b71c1c">❌ NO → 跳过 · 打印WARNING</text>
+
+    <!-- Arrow connectors -->
+    <line x1="370" y1="96" x2="370" y2="106" stroke="#00bcd4" stroke-width="1.5" marker-end="url(#ad2)"/>
+    <line x1="370" y1="150" x2="370" y2="160" stroke="#00bcd4" stroke-width="1.5" marker-end="url(#ad2)"/>
+    <line x1="370" y1="204" x2="370" y2="214" stroke="#00bcd4" stroke-width="1.5" marker-end="url(#ad2)"/>
+    <line x1="370" y1="274" x2="370" y2="295" stroke="#f39c12" stroke-width="1.5" marker-end="url(#ad2)"/>
+    <line x1="480" y1="325" x2="530" y2="325" stroke="#1abc9c" stroke-width="1.5" marker-end="url(#ad2)"/>
+    <line x1="370" y1="355" x2="370" y2="435" stroke="#e74c3c" stroke-width="1.5"/>
+
+    <!-- Read flow (bottom) -->
+    <rect x="30" y="495" width="690" height="205" rx="10" fill="white" stroke="#00bcd4" stroke-width="1.5" filter="url(#sh2)"/>
+    <text x="375" y="520" text-anchor="middle" font-size="14" font-weight="700" fill="#006064">📖 通用 I2C 读取 & 错误恢复流程 (sensor_mqtt_task · 每2秒)</text>
+
+    <!-- Mini flow inside -->
+    <rect x="50" y="535" width="145" height="38" rx="6" fill="#e0f7fa"/><text x="122" y="558" text-anchor="middle" font-size="10" fill="#006064">i2c_cmd_link_create()</text>
+    <rect x="210" y="535" width="145" height="38" rx="6" fill="#e0f7fa"/><text x="282" y="558" text-anchor="middle" font-size="10" fill="#006064">START → 写设备地址</text>
+    <rect x="370" y="535" width="145" height="38" rx="6" fill="#e0f7fa"/><text x="442" y="558" text-anchor="middle" font-size="10" fill="#006064">写寄存器地址→读数据</text>
+    <rect x="530" y="535" width="145" height="38" rx="6" fill="#e0f7fa"/><text x="602" y="558" text-anchor="middle" font-size="10" fill="#006064">STOP→cmd_begin()</text>
+
+    <rect x="50" y="583" width="145" height="38" rx="6" fill="#fff"/><text x="122" y="606" text-anchor="middle" font-size="10" fill="#555">cmd_link_delete()</text>
+    <rect x="210" y="583" width="145" height="38" rx="6" fill="#fff"/><text x="282" y="606" text-anchor="middle" font-size="10" fill="#555">数据解析/滤波</text>
+    <rect x="370" y="583" width="145" height="38" rx="6" fill="#e8f8f5"/><text x="442" y="606" text-anchor="middle" font-size="10" fill="#0e6655">✅ 成功 → fail_cnt=0</text>
+    <rect x="530" y="583" width="145" height="38" rx="6" fill="#ffebee"/><text x="602" y="606" text-anchor="middle" font-size="10" fill="#b71c1c">❌ 失败 → fail_cnt++</text>
+
+    <rect x="50" y="635" width="625" height="55" rx="8" fill="#fef9e7" stroke="#f39c12" stroke-width="1"/>
+    <text x="362" y="656" text-anchor="middle" font-size="11" font-weight="700" fill="#7d6608">🔄 自动故障恢复机制</text>
+    <text x="362" y="676" text-anchor="middle" font-size="10" fill="#555">
+      连续失败 ≥ 5次 → disable() · 跳过该传感器 · 每 15 循环(~30s) 后 retry reinit() · 成功后恢复
+    </text>
+
+    <!-- Arrows for mini flow -->
+    <line x1="195" y1="554" x2="210" y2="554" stroke="#aaa" stroke-width="1.2" marker-end="url(#ad2)"/>
+    <line x1="355" y1="554" x2="370" y2="554" stroke="#aaa" stroke-width="1.2" marker-end="url(#ad2)"/>
+    <line x1="515" y1="554" x2="530" y2="554" stroke="#aaa" stroke-width="1.2" marker-end="url(#ad2)"/>
+    <line x1="122" y1="573" x2="122" y2="583" stroke="#aaa" stroke-width="1"/>
+    <line x1="282" y1="573" x2="282" y2="583" stroke="#aaa" stroke-width="1"/>
+    <line x1="442" y1="573" x2="442" y2="583" stroke="#aaa" stroke-width="1"/>
+    <line x1="602" y1="573" x2="602" y2="583" stroke="#aaa" stroke-width="1"/>
+
+    <!-- ===== RIGHT: Bus Scan Detail ===== -->
+    <rect x="750" y="5" width="720" height="705" rx="14" fill="#fdf8f2" stroke="#e67e22" stroke-width="2"/>
+    <text x="1110" y="35" text-anchor="middle" font-size="17" font-weight="800" fill="#e65100">🔍 I2C 动态总线扫描详解</text>
+
+    <!-- Scan logic -->
+    <rect x="770" y="52" width="680" height="115" rx="10" fill="white" stroke="#e67e22" stroke-width="1.3" filter="url(#sh2)"/>
+    <text x="1110" y="76" text-anchor="middle" font-size="13" font-weight="700" fill="#e65100">📝 扫描伪代码</text>
+    <rect x="785" y="88" width="650" height="68" rx="6" fill="#1a1a2e"/>
+    <text x="800" y="106" font-size="10.5" fill="#7ec699" font-family="monospace">
+      <tspan x="800" dy="0">for (addr = 1; addr &lt; 127; addr++) {</tspan>
+      <tspan x="815" dy="14">cmd = i2c_cmd_link_create();</tspan>
+      <tspan x="815" dy="14">i2c_master_start(cmd);</tspan>
+      <tspan x="815" dy="14">i2c_master_write_byte(cmd, (addr&lt;&lt;1)|I2C_MASTER_WRITE, true);</tspan>
+      <tspan x="815" dy="14">i2c_master_stop(cmd);</tspan>
+      <tspan x="815" dy="14">err = i2c_master_cmd_begin(I2C_NUM_0, cmd, 20ms);</tspan>
+      <tspan x="815" dy="14">i2c_cmd_link_delete(cmd);</tspan>
+      <tspan x="815" dy="14">if (err == ESP_OK) found_list.push(addr);</tspan>
+      <tspan x="800" dy="14">}</tspan>
+    </text>
+
+    <!-- Found device table -->
+    <rect x="770" y="180" width="680" height="130" rx="10" fill="white" stroke="#e67e22" stroke-width="1.3" filter="url(#sh2)"/>
+    <text x="1110" y="204" text-anchor="middle" font-size="13" font-weight="700" fill="#e65100">📋 扫描结果处理逻辑</text>
+
+    <text x="790" y="228" font-size="11" fill="#333">设备数 = 0:</text>
+    <text x="920" y="228" font-size="10" fill="#888">→ WARNING "检查连线/供电/上拉" · 跳过所有I2C传感器 · 系统继续运行</text>
+
+    <text x="790" y="250" font-size="11" fill="#333">发现 0x23 或 0x5C:</text>
+    <text x="980" y="250" font-size="10" fill="#888">→ bh1750_init(I2C_NUM_0, addr) · 连续高分辨率模式 · mutex创建</text>
+
+    <text x="790" y="272" font-size="11" fill="#333">发现 0x58:</text>
+    <text x="890" y="272" font-size="10" fill="#888">→ sgp30_create() · sgp30_init() · NVS基线恢复 · CRC8校验</text>
+
+    <text x="790" y="294" font-size="11" fill="#333">发现 0x39:</text>
+    <text x="890" y="294" font-size="10" fill="#888">→ apds9960_init() · 手势FIFO配置 · GPIO2中断配置</text>
+
+    <!-- I2C_NUM_1 init (Touch) -->
+    <rect x="770" y="325" width="680" height="130" rx="10" fill="white" stroke="#9b59b6" stroke-width="1.3" filter="url(#sh2)"/>
+    <text x="1110" y="350" text-anchor="middle" font-size="14" font-weight="700" fill="#6c3483">🖱️ I2C_NUM_1 (触摸) 初始化流程</text>
+
+    <rect x="790" y="365" width="145" height="35" rx="6" fill="#f4ecf7"/><text x="862" y="386" text-anchor="middle" font-size="10" fill="#6c3483">GPIO配置RST=17</text>
+    <rect x="950" y="365" width="145" height="35" rx="6" fill="#f4ecf7"/><text x="1022" y="386" text-anchor="middle" font-size="10" fill="#6c3483">RST拉低20ms→拉高</text>
+    <rect x="1110" y="365" width="145" height="35" rx="6" fill="#f4ecf7"/><text x="1182" y="386" text-anchor="middle" font-size="10" fill="#6c3483">等待100ms稳定</text>
+
+    <rect x="790" y="410" width="145" height="35" rx="6" fill="#f4ecf7"/><text x="862" y="431" text-anchor="middle" font-size="10" fill="#6c3483">i2c_param_config(NUM_1)</text>
+    <rect x="950" y="410" width="145" height="35" rx="6" fill="#f4ecf7"/><text x="1022" y="431" text-anchor="middle" font-size="10" fill="#6c3483">i2c_driver_install(NUM_1)</text>
+    <rect x="1110" y="410" width="145" height="35" rx="6" fill="#e8daef"/><text x="1182" y="431" text-anchor="middle" font-size="10" fill="#6c3483">✅ 触摸 I2C 就绪</text>
+
+    <line x1="935" y1="382" x2="950" y2="382" stroke="#9b59b6" stroke-width="1.2"/>
+    <line x1="1095" y1="382" x2="1110" y2="382" stroke="#9b59b6" stroke-width="1.2"/>
+    <line x1="935" y1="427" x2="950" y2="427" stroke="#9b59b6" stroke-width="1.2"/>
+    <line x1="1095" y1="427" x2="1110" y2="427" stroke="#9b59b6" stroke-width="1.2"/>
+
+    <!-- Error recovery detail -->
+    <rect x="770" y="470" width="680" height="165" rx="10" fill="#fff5f5" stroke="#e74c3c" stroke-width="1.5" filter="url(#sh2)"/>
+    <text x="1110" y="496" text-anchor="middle" font-size="14" font-weight="700" fill="#b71c1c">🩺 I2C 传感器故障恢复状态机</text>
+
+    <!-- States -->
+    <rect x="790" y="514" width="100" height="38" rx="8" fill="#e8f5e9" stroke="#27ae60" stroke-width="1.3"/>
+    <text x="840" y="534" text-anchor="middle" font-size="10" font-weight="700" fill="#1b5e20">HEALTHY</text>
+    <text x="840" y="548" text-anchor="middle" font-size="8" fill="#555">fail_cnt = 0</text>
+
+    <line x1="890" y1="533" x2="920" y2="533" stroke="#f39c12" stroke-width="1.5" marker-end="url(#ad2)"/>
+    <text x="905" y="526" text-anchor="middle" font-size="8" fill="#e65100">read fail</text>
+
+    <rect x="920" y="514" width="100" height="38" rx="8" fill="#fef9e7" stroke="#f39c12" stroke-width="1.3"/>
+    <text x="970" y="534" text-anchor="middle" font-size="10" font-weight="700" fill="#7d6608">DEGRADED</text>
+    <text x="970" y="548" text-anchor="middle" font-size="8" fill="#555">fail_cnt = 1..4</text>
+
+    <line x1="1020" y1="533" x2="1050" y2="533" stroke="#e74c3c" stroke-width="1.5" marker-end="url(#ad2)"/>
+    <text x="1035" y="526" text-anchor="middle" font-size="8" fill="#b71c1c">≥5 fail</text>
+
+    <rect x="1050" y="514" width="100" height="38" rx="8" fill="#ffebee" stroke="#e74c3c" stroke-width="1.3"/>
+    <text x="1100" y="534" text-anchor="middle" font-size="10" font-weight="700" fill="#b71c1c">DISABLED</text>
+    <text x="1100" y="548" text-anchor="middle" font-size="8" fill="#555">g_dev_ok=false</text>
+
+    <line x1="1100" y1="552" x2="1100" y2="580" stroke="#1abc9c" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#ad2)"/>
+    <text x="1115" y="570" font-size="8" fill="#0e6655">每30s retry</text>
+
+    <rect x="1050" y="582" width="100" height="38" rx="8" fill="#e0f2f1" stroke="#1abc9c" stroke-width="1.3"/>
+    <text x="1100" y="602" text-anchor="middle" font-size="10" font-weight="700" fill="#004d40">RETRY</text>
+    <text x="1100" y="616" text-anchor="middle" font-size="8" fill="#555">reinit()</text>
+
+    <line x1="1050" y1="601" x2="920" y2="601" stroke="#27ae60" stroke-width="1.5" stroke-dasharray="5,3"/>
+    <text x="985" y="596" font-size="8" fill="#1b5e20">✅ success</text>
+
+    <line x1="920" y1="601" x2="890" y2="601" stroke="#27ae60" stroke-width="1.5"/>
+    <line x1="890" y1="601" x2="890" y2="552" stroke="#27ae60" stroke-width="1.5"/>
+
+    <!-- Pin summary table -->
+    <rect x="770" y="650" width="680" height="55" rx="8" fill="#fafafa" stroke="#ddd" stroke-width="1"/>
+    <text x="1110" y="672" text-anchor="middle" font-size="12" font-weight="700" fill="#666">I2C 引脚汇总</text>
+    <text x="1110" y="694" text-anchor="middle" font-size="10.5" fill="#555">
+      <tspan fill="#006064">Bus0: SDA=GPIO9 SCL=GPIO8 · 100kHz · BH1750+SGP30+APDS9960</tspan>
+      <tspan dx="30" fill="#6c3483">| Bus1: SDA=GPIO6 SCL=GPIO7 · 400kHz · FT6336</tspan>
+    </text>
+  </svg>
+</div>
+
+<!-- ==================== 3. I2S FLOW ==================== -->
+<div class="section">
+  <h2>🎵 三、I2S 音频驱动流程</h2>
+  <svg viewBox="0 0 1480 820" width="100%" height="100%" style="max-height:820px">
+    <defs>
+      <filter id="sh3"><feDropShadow dx="0" dy="1.5" stdDeviation="2" flood-color="#0000000d"/></filter>
+      <marker id="ap" markerWidth="9" markerHeight="7" refX="9" refY="3.5" orient="auto"><path d="M0,0 L9,3.5 L0,7 Z" fill="#e91e63"/></marker>
+      <marker id="ap2" markerWidth="9" markerHeight="7" refX="9" refY="3.5" orient="auto"><path d="M0,0 L9,3.5 L0,7 Z" fill="#555"/></marker>
+    </defs>
+
+    <!-- ===== LEFT: Init Flow ===== -->
+    <rect x="10" y="5" width="700" height="380" rx="14" fill="#fdf5f8" stroke="#e91e63" stroke-width="2"/>
+    <text x="360" y="35" text-anchor="middle" font-size="17" font-weight="800" fill="#880e4f">🎤 I2S 初始化流程 (voice_io_init)</text>
+
+    <!-- Step 1: Channel creation -->
+    <rect x="30" y="52" width="310" height="55" rx="8" fill="white" stroke="#e91e63" stroke-width="1.2" filter="url(#sh3)"/>
+    <text x="185" y="74" text-anchor="middle" font-size="12" font-weight="700" fill="#880e4f">① i2s_new_channel()</text>
+    <text x="185" y="92" text-anchor="middle" font-size="10" fill="#555">创建全双工通道 (TX + RX)</text>
+    <text x="185" y="106" text-anchor="middle" font-size="9" fill="#888">I2S_NUM_0 · MASTER · 16kHz 16bit Mono</text>
+
+    <rect x="370" y="52" width="320" height="55" rx="8" fill="#fce4ec" stroke="#e91e63" stroke-width="1"/>
+    <text x="530" y="72" text-anchor="middle" font-size="11" font-weight="700" fill="#880e4f">I2S 管脚分配</text>
+    <text x="530" y="90" text-anchor="middle" font-size="10" fill="#555">
+      BCLK=<span class="pin pin-p">GPIO4</span>
+      LRC=<span class="pin pin-p">GPIO5</span>
+      DIN(Mic)=<span class="pin pin-p">GPIO21</span>
+      DOUT(Spk)=<span class="pin pin-p">GPIO3</span>
+    </text>
+
+    <!-- Step 2: RX channel init -->
+    <rect x="30" y="118" width="310" height="55" rx="8" fill="white" stroke="#e91e63" stroke-width="1.2" filter="url(#sh3)"/>
+    <text x="185" y="140" text-anchor="middle" font-size="12" font-weight="700" fill="#880e4f">② i2s_channel_init_std_mode(RX)</text>
+    <text x="185" y="158" text-anchor="middle" font-size="10" fill="#555">Philips标准格式 · 配置DIN引脚</text>
+    <text x="185" y="172" text-anchor="middle" font-size="10" fill="#555">→ i2s_channel_enable(RX)</text>
+
+    <!-- Step 3: TX channel init -->
+    <rect x="370" y="118" width="320" height="55" rx="8" fill="white" stroke="#e91e63" stroke-width="1.2" filter="url(#sh3)"/>
+    <text x="530" y="140" text-anchor="middle" font-size="12" font-weight="700" fill="#880e4f">③ i2s_channel_init_std_mode(TX)</text>
+    <text x="530" y="158" text-anchor="middle" font-size="10" fill="#555">配置DOUT引脚 · BCLK/LRC复用RX</text>
+    <text x="530" y="172" text-anchor="middle" font-size="10" fill="#555">→ i2s_channel_enable(TX)</text>
+
+    <!-- Step 4: Silence pre-fill -->
+    <rect x="30" y="184" width="310" height="45" rx="8" fill="#fef9e7" stroke="#f39c12" stroke-width="1.2" filter="url(#sh3)"/>
+    <text x="185" y="206" text-anchor="middle" font-size="12" font-weight="700" fill="#7d6608">④ TX DMA 静默填充 (3×4KB)</text>
+    <text x="185" y="222" text-anchor="middle" font-size="10" fill="#555">避免 enable 后输出随机 DMA 残留噪音</text>
+
+    <!-- Step 5: MAX98357 -->
+    <rect x="370" y="184" width="320" height="45" rx="8" fill="white" stroke="#e91e63" stroke-width="1.2" filter="url(#sh3)"/>
+    <text x="530" y="206" text-anchor="middle" font-size="12" font-weight="700" fill="#880e4f">⑤ MAX98357 SD_MODE 初始化</text>
+    <text x="530" y="222" text-anchor="middle" font-size="10" fill="#555">GPIO默认拉低 → 功放静音 (硬件级)</text>
+
+    <!-- Step 6: Ring buffer -->
+    <rect x="30" y="240" width="310" height="45" rx="8" fill="#e0f2f1" stroke="#1abc9c" stroke-width="1.2" filter="url(#sh3)"/>
+    <text x="185" y="262" text-anchor="middle" font-size="12" font-weight="700" fill="#004d40">⑥ 分配环形缓冲区 (PSRAM)</text>
+    <text x="185" y="278" text-anchor="middle" font-size="10" fill="#555">32K samples × 2 bytes = 64KB · 2秒容量</text>
+
+    <!-- Step 7: Queue -->
+    <rect x="370" y="240" width="320" height="45" rx="8" fill="white" stroke="#e91e63" stroke-width="1.2" filter="url(#sh3)"/>
+    <text x="530" y="262" text-anchor="middle" font-size="12" font-weight="700" fill="#880e4f">⑦ 创建语音命令队列</text>
+    <text x="530" y="278" text-anchor="middle" font-size="10" fill="#555">xQueueCreate(10, uint16_t) · 唤醒词→命令ID</text>
+
+    <!-- voice_module_init (AFE) -->
+    <rect x="30" y="300" width="660" height="48" rx="8" fill="#fff3e0" stroke="#e67e22" stroke-width="1.5" filter="url(#sh3)"/>
+    <text x="360" y="322" text-anchor="middle" font-size="12" font-weight="700" fill="#e65100">⑧ voice_module_init() — 加载 ESP-SR 模型 (AFE + WakeNet + MultiNet) 从 SPIFFS</text>
+    <text x="360" y="340" text-anchor="middle" font-size="10" fill="#888">
+      esp_srmodel_init("model") → AFE High-Perf PSRAM → MultiNet 命令识别 → xTaskCreateWithCaps(voice_task, stack=16KB PSRAM)
+    </text>
+
+    <!-- Connect arrows -->
+    <line x1="185" y1="107" x2="185" y2="118" stroke="#e91e63" stroke-width="1.2"/>
+    <line x1="185" y1="173" x2="185" y2="184" stroke="#e91e63" stroke-width="1.2"/>
+    <line x1="185" y1="229" x2="185" y2="240" stroke="#e91e63" stroke-width="1.2"/>
+    <line x1="530" y1="107" x2="530" y2="118" stroke="#e91e63" stroke-width="1.2"/>
+    <line x1="530" y1="173" x2="530" y2="184" stroke="#e91e63" stroke-width="1.2"/>
+    <line x1="530" y1="229" x2="530" y2="240" stroke="#e91e63" stroke-width="1.2"/>
+
+    <!-- ===== RIGHT: voice_task detail ===== -->
+    <rect x="730" y="5" width="740" height="380" rx="14" fill="#f5faf7" stroke="#1abc9c" stroke-width="2"/>
+    <text x="1100" y="35" text-anchor="middle" font-size="17" font-weight="800" fill="#0e6655">🔊 voice_task 主循环详解 (Core 1, 优先级 2)</text>
+
+    <!-- Loop flow -->
+    <rect x="750" y="55" width="335" height="55" rx="9" fill="white" stroke="#1abc9c" stroke-width="1.2" filter="url(#sh3)"/>
+    <text x="917" y="78" text-anchor="middle" font-size="12" font-weight="700" fill="#0e6655">📥 i2s_channel_read(RX)</text>
+    <text x="917" y="96" text-anchor="middle" font-size="10" fill="#555">读取音频块 (chunk_size × channel_num)</text>
+    <text x="917" y="110" text-anchor="middle" font-size="9" fill="#888">超时1000ms · 无数据时continue跳过</text>
+
+    <rect x="1110" y="55" width="340" height="55" rx="9" fill="#fce4ec" stroke="#e91e63" stroke-width="1.2" filter="url(#sh3)"/>
+    <text x="1280" y="78" text-anchor="middle" font-size="12" font-weight="700" fill="#880e4f">📝 写入环形缓冲区</text>
+    <text x="1280" y="96" text-anchor="middle" font-size="10" fill="#555">逐采样拷贝到 PSRAM g_audio_ring[]</text>
+    <text x="1280" y="110" text-anchor="middle" font-size="9" fill="#888">portENTER_CRITICAL 保护写指针</text>
+
+    <rect x="750" y="125" width="335" height="55" rx="9" fill="white" stroke="#1abc9c" stroke-width="1.2" filter="url(#sh3)"/>
+    <text x="917" y="148" text-anchor="middle" font-size="12" font-weight="700" fill="#0e6655">🔬 afe_handle→feed()</text>
+    <text x="917" y="166" text-anchor="middle" font-size="10" fill="#555">喂入 AFE 音频前端处理</text>
+    <text x="917" y="180" text-anchor="middle" font-size="9" fill="#888">降噪·回声消除·波束成形</text>
+
+    <rect x="1110" y="125" width="340" height="55" rx="9" fill="white" stroke="#1abc9c" stroke-width="1.2" filter="url(#sh3)"/>
+    <text x="1280" y="148" text-anchor="middle" font-size="12" font-weight="700" fill="#0e6655">🔍 afe_handle→fetch()</text>
+    <text x="1280" y="166" text-anchor="middle" font-size="10" fill="#555">获取 AFE 处理结果</text>
+    <text x="1280" y="180" text-anchor="middle" font-size="9" fill="#888">返回 wakeup_state + 音频数据</text>
+
+    <!-- Branch -->
+    <polygon points="1100,200 1210,220 1100,240 990,220" fill="#fef9e7" stroke="#f39c12" stroke-width="1.5"/>
+    <text x="1100" y="223" text-anchor="middle" font-size="10" font-weight="700" fill="#7d6608">wakeup_state?</text>
+
+    <rect x="750" y="245" width="200" height="42" rx="8" fill="#e8f8f5" stroke="#1abc9c" stroke-width="1.2"/>
+    <text x="850" y="264" text-anchor="middle" font-size="11" font-weight="700" fill="#0e6655">
+      <tspan x="850" dy="0">✅ WAKENET_DETECTED</tspan>
+      <tspan x="850" dy="14">→ g_wake_cb() 回调</tspan>
+    </text>
+
+    <rect x="750" y="295" width="200" height="30" rx="6" fill="#e0f2f1"/>
+    <text x="850" y="314" text-anchor="middle" font-size="10" fill="#004d40">→ MultiNet.clean() 清状态</text>
+
+    <rect x="980" y="245" width="200" height="42" rx="8" fill="white" stroke="#ddd" stroke-width="1"/>
+    <text x="1080" y="264" text-anchor="middle" font-size="11" fill="#888">❌ 未检测到</text>
+    <text x="1080" y="278" text-anchor="middle" font-size="10" fill="#888">继续 MultiNet.detect()</text>
+
+    <!-- Command detection -->
+    <rect x="750" y="335" width="700" height="40" rx="8" fill="#fce4ec" stroke="#e91e63" stroke-width="1.2"/>
+    <text x="1100" y="354" text-anchor="middle" font-size="11" font-weight="700" fill="#880e4f">🎯 MultiNet.detect() → ESP_MN_STATE_DETECTED → get_results() → command_id → xQueueSend(voice_command_queue)</text>
+    <text x="1100" y="370" text-anchor="middle" font-size="9" fill="#888">vTaskDelay(10ms) → 继续下一轮循环 · 每500轮打印心跳</text>
+
+    <!-- Arrows -->
+    <line x1="917" y1="110" x2="917" y2="125" stroke="#1abc9c" stroke-width="1.2"/>
+    <line x1="1280" y1="110" x2="1280" y2="125" stroke="#e91e63" stroke-width="1.2"/>
+    <line x1="917" y1="180" x2="917" y2="200" stroke="#1abc9c" stroke-width="1.2"/>
+    <line x1="1280" y1="180" x2="1200" y2="200" stroke="#1abc9c" stroke-width="1.2"/>
+
+    <!-- ===== BOTTOM: Audio Playback + Cross-Module ===== -->
+    <text x="740" y="415" text-anchor="middle" font-size="15" font-weight="800" fill="#888">━━━ 音频播放流程 & 跨模块音频共享 ━━━</text>
+
+    <!-- Audio Playback -->
+    <rect x="10" y="430" width="720" height="180" rx="12" fill="#fff5f5" stroke="#e74c3c" stroke-width="1.8"/>
+    <text x="370" y="458" text-anchor="middle" font-size="15" font-weight="800" fill="#b71c1c">🔊 voice_play_audio() — PCM 音频播放流程</text>
+
+    <rect x="30" y="474" width="155" height="40" rx="7" fill="#fce4ec"/><text x="107" y="498" text-anchor="middle" font-size="10" fill="#880e4f">① voice_speaker_unmute()</text>
+    <rect x="200" y="474" width="155" height="40" rx="7" fill="#fce4ec"/><text x="277" y="498" text-anchor="middle" font-size="10" fill="#880e4f">② 软斜坡淡入 (80采样)</text>
+    <rect x="370" y="474" width="155" height="40" rx="7" fill="#fce4ec"/><text x="447" y="498" text-anchor="middle" font-size="10" fill="#880e4f">③ i2s_channel_write(TX)</text>
+    <rect x="540" y="474" width="160" height="40" rx="7" fill="#fce4ec"/><text x="620" y="498" text-anchor="middle" font-size="10" fill="#880e4f">④ 尾音静默64×3次</text>
+
+    <rect x="30" y="524" width="155" height="40" rx="7" fill="#fce4ec"/><text x="107" y="548" text-anchor="middle" font-size="10" fill="#880e4f">⑤ 延迟20ms等尾巴</text>
+    <rect x="200" y="524" width="155" height="40" rx="7" fill="#fce4ec"/><text x="277" y="548" text-anchor="middle" font-size="10" fill="#880e4f">⑥ voice_speaker_mute()</text>
+    <rect x="370" y="524" width="330" height="40" rx="7" fill="#e8daef"/>
+    <text x="535" y="542" text-anchor="middle" font-size="10" fill="#6c3483">🛡️ SD_MODE 硬件静音: 写静默→延迟5ms→拉高SD</text>
+    <text x="535" y="558" text-anchor="middle" font-size="9" fill="#888">解除静音时同理: 写静默→拉高SD→开始播放</text>
+
+    <rect x="30" y="575" width="680" height="28" rx="6" fill="#f0f0f0"/>
+    <text x="370" y="594" text-anchor="middle" font-size="10" fill="#888">
+      🎵 额外功能: voice_play_tone() — 正弦波合成 + ADSR包络 · 用于系统提示音 (按键音/唤醒提示等)
+    </text>
+
+    <!-- Audio Shared Buffer -->
+    <rect x="750" y="430" width="720" height="180" rx="12" fill="#f2faf3" stroke="#27ae60" stroke-width="1.8"/>
+    <text x="1110" y="458" text-anchor="middle" font-size="15" font-weight="800" fill="#1b5e20">🔄 跨模块音频共享 — 环形缓冲区机制</text>
+
+    <!-- Producer -->
+    <rect x="770" y="474" width="280" height="65" rx="9" fill="white" stroke="#27ae60" stroke-width="1.2" filter="url(#sh3)"/>
+    <text x="910" y="498" text-anchor="middle" font-size="12" font-weight="700" fill="#1b5e20">📥 生产者: voice_task</text>
+    <text x="910" y="516" text-anchor="middle" font-size="10" fill="#555">i2s_channel_read → 逐采样写入环形缓冲</text>
+    <text x="910" y="532" text-anchor="middle" font-size="9" fill="#888">portENTER_CRITICAL 保护 g_ring_write</text>
+
+    <!-- Ring buffer -->
+    <rect x="1065" y="474" width="100" height="65" rx="10" fill="#e8f5e9" stroke="#27ae60" stroke-width="1.8"/>
+    <text x="1115" y="498" text-anchor="middle" font-size="10" font-weight="700" fill="#1b5e20">🔄 环形缓冲</text>
+    <text x="1115" y="516" text-anchor="middle" font-size="9" fill="#555">PSRAM</text>
+    <text x="1115" y="532" text-anchor="middle" font-size="9" fill="#888">32K×16bit</text>
+
+    <!-- Consumer -->
+    <rect x="1180" y="474" width="270" height="65" rx="9" fill="white" stroke="#27ae60" stroke-width="1.2" filter="url(#sh3)"/>
+    <text x="1315" y="498" text-anchor="middle" font-size="12" font-weight="700" fill="#1b5e20">📤 消费者: xiaozi_ai</text>
+    <text x="1315" y="516" text-anchor="middle" font-size="10" fill="#555">voice_read_audio(buf, max, timeout)</text>
+    <text x="1315" y="532" text-anchor="middle" font-size="9" fill="#888">→ Opus编码 → WSS发送 → 云端</text>
+
+    <!-- Arrows -->
+    <line x1="1050" y1="506" x2="1065" y2="506" stroke="#27ae60" stroke-width="2" marker-end="url(#ap2)"/>
+    <line x1="1165" y1="506" x2="1180" y2="506" stroke="#27ae60" stroke-width="2" marker-end="url(#ap2)"/>
+
+    <!-- Solves I2S dual read -->
+    <rect x="770" y="552" width="680" height="50" rx="8" fill="#e8f5e9" stroke="#27ae60" stroke-width="1"/>
+    <text x="1110" y="574" text-anchor="middle" font-size="11" font-weight="700" fill="#1b5e20">💡 设计要点: 解决 I2S RX 双读冲突</text>
+    <text x="1110" y="594" text-anchor="middle" font-size="10" fill="#555">
+      I2S RX 只能由单个任务读取 → voice_task 作为唯一读者写入环形缓冲 → xiaozi_ai 从缓冲读取，避免竞争
+    </text>
+
+    <!-- Bottom pin summary -->
+    <rect x="10" y="625" width="1460" height="65" rx="10" fill="white" stroke="#ddd" stroke-width="1.5" filter="url(#sh3)"/>
+    <text x="740" y="650" text-anchor="middle" font-size="13" font-weight="700" fill="#880e4f">I2S 引脚 & 参数配置总览</text>
+    <text x="740" y="674" text-anchor="middle" font-size="10.5" fill="#555">
+      <tspan fill="#880e4f">BCLK=GPIO4</tspan> ·
+      <tspan fill="#880e4f">LRC=GPIO5</tspan> ·
+      <tspan fill="#880e4f">DIN(Mic)=GPIO21</tspan> ·
+      <tspan fill="#880e4f">DOUT(Spk)=GPIO3</tspan> ·
+      <tspan>16kHz · 16bit · Mono · Philips格式 · I2S_NUM_0 · MASTER · DMA</tspan>
+    </text>
+
+    <!-- XiaoZhi AI audio pipeline -->
+    <rect x="10" y="700" width="1460" height="55" rx="10" fill="#e0f2f1" stroke="#1abc9c" stroke-width="1.5" filter="url(#sh3)"/>
+    <text x="740" y="722" text-anchor="middle" font-size="13" font-weight="700" fill="#004d40">🎯 XiaoZhi AI 云端对话 — 完整音频管线</text>
+    <text x="740" y="744" text-anchor="middle" font-size="10.5" fill="#555">
+      MEMS Mic → I2S RX → Ring Buffer → Opus Encoder (60ms帧) → WSS send → 云端 ASR→LLM→TTS → WSS recv → Opus Decoder → I2S TX → MAX98357 → Speaker
+    </text>
+  </svg>
+</div>
+
+<!-- ==================== 4. SPI FLOW ==================== -->
+<div class="section">
+  <h2>🖥️ 四、SPI 显示驱动流程</h2>
+  <svg viewBox="0 0 1480 720" width="100%" height="100%" style="max-height:720px">
+    <defs>
+      <filter id="sh4"><feDropShadow dx="0" dy="1.5" stdDeviation="2" flood-color="#0000000d"/></filter>
+      <marker id="ao" markerWidth="9" markerHeight="7" refX="9" refY="3.5" orient="auto"><path d="M0,0 L9,3.5 L0,7 Z" fill="#ff9800"/></marker>
+      <marker id="ao2" markerWidth="9" markerHeight="7" refX="9" refY="3.5" orient="auto"><path d="M0,0 L9,3.5 L0,7 Z" fill="#555"/></marker>
+    </defs>
+
+    <!-- ===== LEFT: Init ===== -->
+    <rect x="10" y="5" width="720" height="310" rx="14" fill="#fffaf5" stroke="#ff9800" stroke-width="2"/>
+    <text x="370" y="35" text-anchor="middle" font-size="17" font-weight="800" fill="#e65100">📺 SPI 显示初始化流程 (app_main → display_init)</text>
+
+    <!-- Step 1: SPI Bus -->
+    <rect x="30" y="52" width="310" height="55" rx="8" fill="white" stroke="#ff9800" stroke-width="1.3" filter="url(#sh4)"/>
+    <text x="185" y="74" text-anchor="middle" font-size="12" font-weight="700" fill="#e65100">① spi_bus_initialize(SPI2_HOST)</text>
+    <text x="185" y="92" text-anchor="middle" font-size="10" fill="#555">
+      <tspan fill="#e65100">MOSI=GPIO11</tspan> ·
+      <tspan fill="#e65100">MISO=GPIO13</tspan> ·
+      <tspan fill="#e65100">SCK=GPIO12</tspan>
+    </text>
+    <text x="185" y="106" text-anchor="middle" font-size="9" fill="#888">DMA_CH_AUTO · max_transfer_sz=W×H×2 · QuadWP/HD=-1</text>
+
+    <rect x="370" y="52" width="340" height="55" rx="8" fill="#fff3e0" stroke="#ff9800" stroke-width="1"/>
+    <text x="540" y="72" text-anchor="middle" font-size="11" font-weight="700" fill="#e65100">🖥️ ILI9341 管脚分配</text>
+    <text x="540" y="90" text-anchor="middle" font-size="10" fill="#555">
+      <tspan fill="#e65100">CS=GPIO10</tspan> ·
+      <tspan fill="#e65100">DC=GPIO15</tspan> ·
+      <tspan fill="#e65100">RST=GPIO14</tspan> ·
+      <tspan fill="#e65100">BL=GPIO16</tspan>
+    </text>
+
+    <!-- Step 2: Panel IO -->
+    <rect x="30" y="118" width="310" height="55" rx="8" fill="white" stroke="#ff9800" stroke-width="1.3" filter="url(#sh4)"/>
+    <text x="185" y="140" text-anchor="middle" font-size="12" font-weight="700" fill="#e65100">② esp_lcd_new_panel_io_spi()</text>
+    <text x="185" y="158" text-anchor="middle" font-size="10" fill="#555">27MHz SPI时钟 · Mode 0 · 8位命令/参数</text>
+    <text x="185" y="172" text-anchor="middle" font-size="9" fill="#888">队列深度 8 · 注册 on_color_trans_done ISR 回调</text>
+
+    <!-- Step 3: Panel -->
+    <rect x="370" y="118" width="340" height="55" rx="8" fill="white" stroke="#ff9800" stroke-width="1.3" filter="url(#sh4)"/>
+    <text x="540" y="140" text-anchor="middle" font-size="12" font-weight="700" fill="#e65100">③ esp_lcd_new_panel_ili9341()</text>
+    <text x="540" y="158" text-anchor="middle" font-size="10" fill="#555">BGR 颜色顺序 · Big-Endian · 16bpp</text>
+    <text x="540" y="172" text-anchor="middle" font-size="10" fill="#555">→ reset → init → no invert → no mirror → disp_on</text>
+
+    <!-- Step 4: Backlight -->
+    <rect x="30" y="184" width="310" height="40" rx="8" fill="white" stroke="#ff9800" stroke-width="1.3" filter="url(#sh4)"/>
+    <text x="185" y="206" text-anchor="middle" font-size="12" font-weight="700" fill="#e65100">④ BL背光 GPIO16 → 输出高 (亮屏)</text>
+
+    <!-- Step 5: Semaphore -->
+    <rect x="370" y="184" width="340" height="40" rx="8" fill="white" stroke="#ff9800" stroke-width="1.3" filter="url(#sh4)"/>
+    <text x="540" y="206" text-anchor="middle" font-size="12" font-weight="700" fill="#e65100">⑤ xSemaphoreCreateBinary() — flush同步信号量</text>
+
+    <!-- Step 6: LVGL port -->
+    <rect x="30" y="240" width="680" height="48" rx="8" fill="#f4ecf7" stroke="#9b59b6" stroke-width="1.5" filter="url(#sh4)"/>
+    <text x="370" y="262" text-anchor="middle" font-size="12" font-weight="700" fill="#6c3483">⑥ lvgl_port_init() — LVGL 显示驱动注册</text>
+    <text x="370" y="280" text-anchor="middle" font-size="10" fill="#888">
+      双缓冲 (320×15×2) · DMA heap 64字节对齐 · disp_flush 回调 · touchpad_read 回调 · 5ms esp_timer Tick
+    </text>
+
+    <!-- Arrows -->
+    <line x1="185" y1="107" x2="185" y2="118" stroke="#ff9800" stroke-width="1.2"/>
+    <line x1="185" y1="173" x2="185" y2="184" stroke="#ff9800" stroke-width="1.2"/>
+    <line x1="185" y1="224" x2="185" y2="240" stroke="#ff9800" stroke-width="1.2"/>
+    <line x1="540" y1="107" x2="540" y2="118" stroke="#ff9800" stroke-width="1.2"/>
+    <line x1="540" y1="173" x2="540" y2="184" stroke="#ff9800" stroke-width="1.2"/>
+
+    <!-- ===== RIGHT: SPI Transaction Detail ===== -->
+    <rect x="750" y="5" width="720" height="310" rx="14" fill="#faf9f8" stroke="#2c3e50" stroke-width="2"/>
+    <text x="1110" y="35" text-anchor="middle" font-size="17" font-weight="800" fill="#2c3e50">⚡ SPI LCD 事务时序详解</text>
+
+    <!-- LCD Command -->
+    <rect x="770" y="55" width="680" height="75" rx="9" fill="white" stroke="#2c3e50" stroke-width="1.2" filter="url(#sh4)"/>
+    <text x="1110" y="78" text-anchor="middle" font-size="13" font-weight="700" fill="#2c3e50">📝 LCD 命令写入 (DC=0, 8-bit)</text>
+    <rect x="790" y="88" width="35" height="20" rx="3" fill="#fff3e0"/><text x="807" y="102" text-anchor="middle" font-size="8" fill="#e65100">CS↓</text>
+    <rect x="832" y="88" width="50" height="20" rx="3" fill="#fff3e0"/><text x="857" y="102" text-anchor="middle" font-size="8" fill="#e65100">CMD=0x2A</text>
+    <rect x="889" y="88" width="80" height="20" rx="3" fill="#fff3e0"/><text x="929" y="102" text-anchor="middle" font-size="8" fill="#e65100">PARAM[0..3]</text>
+    <rect x="976" y="88" width="35" height="20" rx="3" fill="#fff3e0"/><text x="993" y="102" text-anchor="middle" font-size="8" fill="#e65100">CS↑</text>
+    <text x="1110" y="124" text-anchor="middle" font-size="10" fill="#888">
+      SPI Mode 0 (CPOL=0, CPHA=0) · DC 低电平=命令 · DC 高电平=数据 · 27MHz 时钟
+    </text>
+
+    <!-- Pixel Data -->
+    <rect x="770" y="142" width="680" height="75" rx="9" fill="white" stroke="#2c3e50" stroke-width="1.2" filter="url(#sh4)"/>
+    <text x="1110" y="165" text-anchor="middle" font-size="13" font-weight="700" fill="#2c3e50">🎨 像素数据传输 (DC=1, DMA 批量)</text>
+    <rect x="790" y="175" width="35" height="20" rx="3" fill="#ffebee"/><text x="807" y="189" text-anchor="middle" font-size="8" fill="#e74c3c">CS↓</text>
+    <rect x="832" y="175" width="50" height="20" rx="3" fill="#ffebee"/><text x="857" y="189" text-anchor="middle" font-size="8" fill="#e74c3c">CMD=0x2C</text>
+    <rect x="889" y="175" width="200" height="20" rx="3" fill="#ffebee"/><text x="989" y="189" text-anchor="middle" font-size="8" fill="#e74c3c">PIXEL DATA (W×H×2 bytes DMA)</text>
+    <rect x="1096" y="175" width="35" height="20" rx="3" fill="#ffebee"/><text x="1113" y="189" text-anchor="middle" font-size="8" fill="#e74c3c">CS↑</text>
+    <text x="1110" y="210" text-anchor="middle" font-size="10" fill="#888">
+      esp_lcd_panel_draw_bitmap() 内部: set_window(x1,y1,x2,y2) → write_color_data(pixels, len)
+    </text>
+
+    <!-- DMA + ISR -->
+    <rect x="770" y="230" width="680" height="75" rx="9" fill="#e8f0fe" stroke="#2196f3" stroke-width="1.2" filter="url(#sh4)"/>
+    <text x="1110" y="253" text-anchor="middle" font-size="13" font-weight="700" fill="#0d47a1">📡 DMA 传输 & ISR 回调</text>
+    <text x="1110" y="273" text-anchor="middle" font-size="10.5" fill="#555">
+      DMA 将像素数据从 PSRAM/DMA-heap → SPI FIFO → ILI9341 GRAM · 传输完成后触发 ISR
+    </text>
+    <text x="1110" y="291" text-anchor="middle" font-size="10.5" fill="#555">
+      on_color_trans_done() ISR → xSemaphoreGiveFromISR(s_flush_sem) → 唤醒 LVGL flush 等待
+    </text>
+
+    <!-- ===== BOTTOM: LVGL Flush Loop ===== -->
+    <text x="740" y="345" text-anchor="middle" font-size="15" font-weight="800" fill="#888">━━━ LVGL 渲染管线 — 从 UI 刷新到屏幕显示 ━━━</text>
+
+    <!-- LVGL Render Pipeline -->
+    <rect x="10" y="360" width="1460" height="350" rx="12" fill="#f8fafc" stroke="#2c3e50" stroke-width="2"/>
+
+    <!-- Producer: LVGL -->
+    <rect x="30" y="382" width="280" height="70" rx="10" fill="white" stroke="#9b59b6" stroke-width="1.5" filter="url(#sh4)"/>
+    <text x="170" y="406" text-anchor="middle" font-size="13" font-weight="700" fill="#6c3483">① LVGL 渲染引擎</text>
+    <text x="170" y="424" text-anchor="middle" font-size="10" fill="#555">lv_timer_handler() 检测脏区域</text>
+    <text x="170" y="440" text-anchor="middle" font-size="10" fill="#555">渲染到 draw_buf1 或 draw_buf2</text>
+
+    <rect x="340" y="382" width="280" height="70" rx="10" fill="white" stroke="#9b59b6" stroke-width="1.5" filter="url(#sh4)"/>
+    <text x="480" y="406" text-anchor="middle" font-size="13" font-weight="700" fill="#6c3483">② disp_flush() 回调</text>
+    <text x="480" y="424" text-anchor="middle" font-size="10" fill="#555">LVGL 调用注册的 flush 函数</text>
+    <text x="480" y="440" text-anchor="middle" font-size="10" fill="#555">传入 (area, color_map)</text>
+
+    <rect x="650" y="382" width="280" height="70" rx="10" fill="#fff3e0" stroke="#ff9800" stroke-width="1.5" filter="url(#sh4)"/>
+    <text x="790" y="406" text-anchor="middle" font-size="13" font-weight="700" fill="#e65100">③ esp_lcd_panel_draw_bitmap()</text>
+    <text x="790" y="424" text-anchor="middle" font-size="10" fill="#555">设置显示窗口 (x1,y1)→(x2,y2)</text>
+    <text x="790" y="440" text-anchor="middle" font-size="10" fill="#555">DMA 传输像素到 SPI → ILI9341</text>
+
+    <rect x="960" y="382" width="220" height="70" rx="10" fill="white" stroke="#ff9800" stroke-width="1.5" filter="url(#sh4)"/>
+    <text x="1070" y="406" text-anchor="middle" font-size="13" font-weight="700" fill="#e65100">④ display_wait_for_flush()</text>
+    <text x="1070" y="424" text-anchor="middle" font-size="10" fill="#555">xSemaphoreTake(s_flush_sem)</text>
+    <text x="1070" y="440" text-anchor="middle" font-size="10" fill="#555">超时 200ms → WARNING</text>
+
+    <rect x="1210" y="382" width="240" height="70" rx="10" fill="#e8f0fe" stroke="#2196f3" stroke-width="1.5" filter="url(#sh4)"/>
+    <text x="1330" y="406" text-anchor="middle" font-size="13" font-weight="700" fill="#0d47a1">⑤ DMA ISR 通知</text>
+    <text x="1330" y="424" text-anchor="middle" font-size="10" fill="#555">on_color_trans_done()</text>
+    <text x="1330" y="440" text-anchor="middle" font-size="10" fill="#555">→ xSemaphoreGiveFromISR()</text>
+
+    <!-- Arrows between stages -->
+    <line x1="310" y1="417" x2="340" y2="417" stroke="#9b59b6" stroke-width="2" marker-end="url(#ao2)"/>
+    <line x1="620" y1="417" x2="650" y2="417" stroke="#ff9800" stroke-width="2" marker-end="url(#ao)"/>
+    <line x1="930" y1="417" x2="960" y2="417" stroke="#ff9800" stroke-width="2" marker-end="url(#ao)"/>
+    <line x1="1180" y1="417" x2="1210" y2="417" stroke="#2196f3" stroke-width="2" marker-end="url(#ao2)"/>
+    <!-- ISR back to wait -->
+    <path d="M 1330 452 L 1330 475 L 1070 475 L 1070 452" fill="none" stroke="#2196f3" stroke-width="1.5" stroke-dasharray="5,3"/>
+    <text x="1200" y="493" text-anchor="middle" font-size="9" fill="#0d47a1">ISR 释放信号量</text>
+
+    <!-- Bottom: Double Buffer -->
+    <rect x="30" y="470" width="460" height="110" rx="10" fill="#f4ecf7" stroke="#9b59b6" stroke-width="1.5" filter="url(#sh4)"/>
+    <text x="260" y="496" text-anchor="middle" font-size="14" font-weight="700" fill="#6c3483">🔄 双缓冲 (Double Buffering) 机制</text>
+
+    <rect x="50" y="512" width="190" height="55" rx="7" fill="white" stroke="#9b59b6" stroke-width="1"/>
+    <text x="145" y="534" text-anchor="middle" font-size="11" font-weight="700" fill="#6c3483">Buf1: 320×15 lines</text>
+    <text x="145" y="554" text-anchor="middle" font-size="9.5" fill="#888">DMA-Capable Internal Heap</text>
+    <text x="145" y="566" text-anchor="middle" font-size="9" fill="#aaa">64字节对齐</text>
+
+    <rect x="260" y="512" width="210" height="55" rx="7" fill="white" stroke="#9b59b6" stroke-width="1"/>
+    <text x="365" y="534" text-anchor="middle" font-size="11" font-weight="700" fill="#6c3483">Buf2: 320×15 lines</text>
+    <text x="365" y="554" text-anchor="middle" font-size="9.5" fill="#888">DMA-Capable Internal Heap</text>
+    <text x="365" y="566" text-anchor="middle" font-size="9" fill="#aaa">64字节对齐</text>
+
+    <text x="260" y="577" text-anchor="middle" font-size="9" fill="#6c3483">LVGL 在 Buf1 渲染 → DMA 发送 Buf2 → 交替进行 → 15行粒度减少撕裂</text>
+
+    <!-- Right: LVGL Timer -->
+    <rect x="510" y="470" width="460" height="110" rx="10" fill="#e8f8f5" stroke="#1abc9c" stroke-width="1.5" filter="url(#sh4)"/>
+    <text x="740" y="496" text-anchor="middle" font-size="14" font-weight="700" fill="#0e6655">⏱️ LVGL Tick 定时器</text>
+
+    <rect x="530" y="512" width="420" height="58" rx="7" fill="white" stroke="#1abc9c" stroke-width="1"/>
+    <text x="740" y="534" text-anchor="middle" font-size="11" font-weight="700" fill="#0e6655">esp_timer_create("lvgl_tick") → esp_timer_start_periodic(5000μs)</text>
+    <text x="740" y="554" text-anchor="middle" font-size="10" fill="#555">每 5ms 调用 lv_tick_inc(5) → LVGL 内部计时器推进</text>
+    <text x="740" y="568" text-anchor="middle" font-size="9" fill="#888">用于: 动画 · 超时 · lv_timer_handler 调度间隔计算</text>
+
+    <!-- Color format -->
+    <rect x="990" y="470" width="460" height="110" rx="10" fill="#fff8e1" stroke="#e67e22" stroke-width="1.5" filter="url(#sh4)"/>
+    <text x="1220" y="496" text-anchor="middle" font-size="14" font-weight="700" fill="#e65100">🎨 颜色格式配置</text>
+
+    <text x="1220" y="522" text-anchor="middle" font-size="11" fill="#555">
+      RGB Order: <code>LCD_RGB_ELEMENT_ORDER_BGR</code>
+    </text>
+    <text x="1220" y="542" text-anchor="middle" font-size="11" fill="#555">
+      Endian: <code>LCD_RGB_DATA_ENDIAN_BIG</code>
+    </text>
+    <text x="1220" y="562" text-anchor="middle" font-size="11" fill="#555">
+      BPP: <code>16 bits per pixel (RGB565)</code>
+    </text>
+    <text x="1220" y="578" text-anchor="middle" font-size="10" fill="#888">
+      LV_COLOR_16_SWAP 已启用 → 自动字节序交换
+    </text>
+
+    <!-- Timing diagram -->
+    <rect x="30" y="596" width="1420" height="105" rx="10" fill="white" stroke="#ddd" stroke-width="1.5" filter="url(#sh4)"/>
+    <text x="740" y="622" text-anchor="middle" font-size="13" font-weight="700" fill="#666">⏱️ 一帧渲染时序 (320×240 @ 27MHz SPI)</text>
+
+    <!-- Timeline -->
+    <rect x="50" y="640" width="200" height="28" rx="5" fill="#e0f7fa"/><text x="150" y="658" text-anchor="middle" font-size="9" fill="#006064">LVGL渲染 (~1-5ms)</text>
+    <rect x="260" y="640" width="220" height="28" rx="5" fill="#fff3e0"/><text x="370" y="658" text-anchor="middle" font-size="9" fill="#e65100">CMD: set_window (~5μs)</text>
+    <rect x="490" y="640" width="400" height="28" rx="5" fill="#ffebee"/><text x="690" y="658" text-anchor="middle" font-size="9" fill="#e74c3c">DMA: pixel data 320×240×2=150KB (~6ms @27MHz)</text>
+    <rect x="900" y="640" width="200" height="28" rx="5" fill="#e8f0fe"/><text x="1000" y="658" text-anchor="middle" font-size="9" fill="#0d47a1">ISR→信号量 (~1μs)</text>
+
+    <!-- Frame rate calc -->
+    <text x="740" y="692" text-anchor="middle" font-size="10.5" fill="#888">
+      理论帧率: 1000ms ÷ (渲染+传输) ≈ 1000 ÷ 8 ≈ <tspan fill="#e65100" font-weight="700">125 FPS</tspan> (仅刷脏区域) ·
+      全屏刷新: ~8ms/帧 ≈ <tspan fill="#e65100" font-weight="700">125 FPS</tspan> ·
+      实际帧率受 lv_timer_handler 调度间隔限制 (通常 15-30ms → 33-66 FPS)
+    </text>
+  </svg>
+</div>
+
+<!-- ==================== 5. COMPARISON TABLE ==================== -->
+<div class="section">
+  <h2>📊 五、三大驱动协议对比总结</h2>
+  <table>
+    <tr>
+      <th style="width:14%">特性</th>
+      <th style="width:28%"><span style="color:#006064">🔌 I2C</span></th>
+      <th style="width:28%"><span style="color:#880e4f">🎵 I2S</span></th>
+      <th style="width:30%"><span style="color:#e65100">📺 SPI</span></th>
+    </tr>
+    <tr>
+      <td><b>总线编号</b></td>
+      <td>I2C_NUM_0 (传感器) + I2C_NUM_1 (触摸)</td>
+      <td>I2S_NUM_0 (全双工)</td>
+      <td>SPI2_HOST</td>
+    </tr>
+    <tr>
+      <td><b>引脚</b></td>
+      <td>
+        Bus0: <span class="pin pin-b">SDA=9</span> <span class="pin pin-b">SCL=8</span><br>
+        Bus1: <span class="pin pin-b">SDA=6</span> <span class="pin pin-b">SCL=7</span>
+      </td>
+      <td>
+        <span class="pin pin-p">BCLK=4</span> <span class="pin pin-p">LRC=5</span>
+        <span class="pin pin-p">DIN=21</span> <span class="pin pin-p">DOUT=3</span>
+      </td>
+      <td>
+        <span class="pin pin-o">SCK=12</span> <span class="pin pin-o">MOSI=11</span> <span class="pin pin-o">MISO=13</span>
+        <span class="pin pin-o">CS=10</span> <span class="pin pin-o">DC=15</span>
+      </td>
+    </tr>
+    <tr>
+      <td><b>时钟速率</b></td>
+      <td>Bus0: 100kHz (标准) · Bus1: 400kHz (快速)</td>
+      <td>采样率 16kHz · BCLK = 16k×16×2 = 512kHz</td>
+      <td>27MHz (SPI 时钟)</td>
+    </tr>
+    <tr>
+      <td><b>DMA</b></td>
+      <td>不使用 (短数据 · 阻塞式)</td>
+      <td>使用 (RX + TX 双通道 DMA)</td>
+      <td>使用 (SPI_DMA_CH_AUTO · 大块像素)</td>
+    </tr>
+    <tr>
+      <td><b>设备数量</b></td>
+      <td>Bus0: 3个 (BH1750+SGP30+APDS9960) · Bus1: 1个 (FT6336)</td>
+      <td>2个 (MEMS麦克风 + MAX98357功放)</td>
+      <td>1个 (ILI9341 LCD)</td>
+    </tr>
+    <tr>
+      <td><b>寻址方式</b></td>
+      <td>7位地址 + R/W 位 · 动态扫描发现</td>
+      <td>无寻址 · 点对点 · 时分复用 (TDM)</td>
+      <td>CS 片选 (GPIO10) + DC 命令/数据选择</td>
+    </tr>
+    <tr>
+      <td><b>数据格式</b></td>
+      <td>字节流 · 寄存器地址+数据</td>
+      <td>16bit PCM 采样 · Philips 标准格式</td>
+      <td>8位命令 + 16位像素 (RGB565) · BGR Big-Endian</td>
+    </tr>
+    <tr>
+      <td><b>同步机制</b></td>
+      <td>Mutex (BH1750) · 无 (其他阻塞式)</td>
+      <td>Critical Section (环形缓冲读写指针) · Queue (命令ID)</td>
+      <td>Binary Semaphore (DMA 传输完成 ISR → flush等待)</td>
+    </tr>
+    <tr>
+      <td><b>错误处理</b></td>
+      <td>5次连续失败 → disable → 每30秒 retry reinit</td>
+      <td>读取超时 1000ms → continue 跳过本轮 · 心跳日志</td>
+      <td>draw_bitmap 失败 → WARNING 日志 · flush 超时 200ms</td>
+    </tr>
+    <tr>
+      <td><b>缓冲区</b></td>
+      <td>无内置缓冲 (i2c驱动内部FIFO)</td>
+      <td>环形缓冲 64KB PSRAM (2秒音频) · DMA 缓冲 4KB</td>
+      <td>双缓冲 2×320×15×2 = 19.2KB DMA Heap</td>
+    </tr>
+    <tr>
+      <td><b>主要API</b></td>
+      <td><code>i2c_master_cmd_begin()</code> · <code>i2c_cmd_link_create()</code></td>
+      <td><code>i2s_channel_read()</code> · <code>i2s_channel_write()</code></td>
+      <td><code>esp_lcd_panel_draw_bitmap()</code> · <code>spi_bus_initialize()</code></td>
+    </tr>
+    <tr>
+      <td><b>驱动层封装</b></td>
+      <td>裸 I2C API + 各传感器组件封装</td>
+      <td>voice 组件: voice_io_init / voice_read_audio / voice_play_audio</td>
+      <td>display 组件: display_init / display_wait_for_flush + LVGL port</td>
+    </tr>
+  </table>
+</div>
+
+</div>
+</body>
+</html>

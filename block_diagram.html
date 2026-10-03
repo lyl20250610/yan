@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AIoT - ESP32-S3 智能多传感器物联网设备 系统框图</title>
+<style>
+  :root {
+    --bg: #f5f5f5;
+    --card-bg: #ffffff;
+    --text: #1a1a2e;
+    --text-secondary: #555;
+    --border: #e0e0e0;
+    --mcu: #2c3e50;
+    --sensor: #3498db;
+    --display: #9b59b6;
+    --wireless: #e67e22;
+    --cloud: #e74c3c;
+    --ai: #1abc9c;
+    --power: #f39c12;
+    --gpio: #27ae60;
+    --audio: #e91e63;
+    --i2c: #00bcd4;
+    --spi: #ff9800;
+    --bus: #607d8b;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 24px;
+    line-height: 1.5;
+  }
+  .container { max-width: 1400px; margin: 0 auto; }
+  h1 {
+    text-align: center;
+    font-size: 28px;
+    margin-bottom: 8px;
+    color: #1a1a2e;
+  }
+  .subtitle {
+    text-align: center;
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-bottom: 32px;
+  }
+  .diagram-section {
+    background: var(--card-bg);
+    border-radius: 12px;
+    padding: 28px;
+    margin-bottom: 24px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    overflow-x: auto;
+  }
+  .diagram-section h2 {
+    font-size: 18px;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--border);
+    color: #1a1a2e;
+  }
+  svg { display: block; margin: 0 auto; }
+
+  /* Legend */
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    justify-content: center;
+    margin-top: 20px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+  .legend-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+  }
+
+  /* Table styles */
+  .info-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .info-table th {
+    background: #f8f9fa;
+    padding: 10px 14px;
+    text-align: left;
+    font-weight: 600;
+    border-bottom: 2px solid var(--border);
+    white-space: nowrap;
+  }
+  .info-table td {
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .info-table tr:hover td { background: #fafbfc; }
+  .tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: "SF Mono", "Cascadia Code", "Consolas", monospace;
+  }
+  .tag-spi  { background: #fff3e0; color: #e65100; }
+  .tag-i2c  { background: #e0f7fa; color: #006064; }
+  .tag-i2s  { background: #fce4ec; color: #880e4f; }
+  .tag-gpio { background: #e8f5e9; color: #1b5e20; }
+  .tag-wifi { background: #fff8e1; color: #e65100; }
+  .tag-ble  { background: #e3f2fd; color: #0d47a1; }
+  .tag-uart { background: #f3e5f5; color: #4a148c; }
+  .tag-mqtt { background: #ffebee; color: #b71c1c; }
+  .tag-wss  { background: #e0f2f1; color: #004d40; }
+
+  code {
+    font-family: "SF Mono", "Cascadia Code", "Consolas", monospace;
+    font-size: 12px;
+    background: #f0f0f0;
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+
+  /* Two-column grid */
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+  @media (max-width: 1000px) {
+    .grid-2 { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>🖥️ AIoT — ESP32-S3 智能多传感器物联网设备</h1>
+<p class="subtitle">系统架构框图 | ESP-IDF v5.1.2 | LVGL v8.4 | FreeRTOS | 8MB Flash + 8MB PSRAM</p>
+
+<!-- ==================== 1. OVERALL ARCHITECTURE ==================== -->
+<div class="diagram-section">
+  <h2>📐 一、总体系统架构</h2>
+  <svg viewBox="0 0 1320 820" width="100%" height="100%" style="max-height:820px;">
+    <defs>
+      <filter id="shadow" x="-2%" y="-2%" width="104%" height="104%">
+        <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#00000018"/>
+      </filter>
+      <marker id="arrowRight" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+        <path d="M0,0 L8,3 L0,6 Z" fill="#888"/>
+      </marker>
+      <marker id="arrowDown" markerWidth="6" markerHeight="8" refX="3" refY="8" orient="auto">
+        <path d="M0,0 L6,0 L3,8 Z" fill="#888"/>
+      </marker>
+    </defs>
+
+    <!-- Background grid -->
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#f0f0f0" stroke-width="0.5"/>
+    </pattern>
+    <rect width="1320" height="820" fill="url(#grid)" rx="8"/>
+
+    <!-- ===== TOP: Cloud Layer ===== -->
+    <text x="660" y="24" text-anchor="middle" font-size="13" font-weight="700" fill="#999">☁ 云 平 台 层</text>
+
+    <!-- OneNET Cloud -->
+    <rect x="60" y="36" width="280" height="72" rx="10" fill="#fff5f5" stroke="#e74c3c" stroke-width="1.5" filter="url(#shadow)"/>
+    <text x="200" y="60" text-anchor="middle" font-size="15" font-weight="700" fill="#c0392b">🔴 OneNET IoT 平台</text>
+    <text x="200" y="80" text-anchor="middle" font-size="11" fill="#888">studio-mqtts.heclouds.com:8883</text>
+    <text x="200" y="96" text-anchor="middle" font-size="10" fill="#aaa">MQTT/TLS 1.2 · OneJSON 物模型</text>
+
+    <!-- XiaoZhi AI Cloud -->
+    <rect x="680" y="36" width="280" height="72" rx="10" fill="#f0faf8" stroke="#1abc9c" stroke-width="1.5" filter="url(#shadow)"/>
+    <text x="820" y="60" text-anchor="middle" font-size="15" font-weight="700" fill="#0e6655">🟢 XiaoZhi AI 云助手</text>
+    <text x="820" y="80" text-anchor="middle" font-size="11" fill="#888">api.tenclass.net/xiaozhi/v1/</text>
+    <text x="820" y="96" text-anchor="middle" font-size="10" fill="#aaa">WebSocket WSS · Opus 音频 · OTA</text>
+
+    <!-- NTP -->
+    <rect x="1030" y="36" width="250" height="72" rx="10" fill="#fafafa" stroke="#ccc" stroke-width="1" filter="url(#shadow)"/>
+    <text x="1155" y="60" text-anchor="middle" font-size="14" font-weight="700" fill="#666">🕐 NTP 时间同步</text>
+    <text x="1155" y="80" text-anchor="middle" font-size="11" fill="#888">ntp.aliyun.com / ntp.tencent.com</text>
+    <text x="1155" y="96" text-anchor="middle" font-size="10" fill="#aaa">SNTP over UDP/123</text>
+
+    <!-- ===== MIDDLE: ESP32-S3 Core ===== -->
+    <text x="660" y="134" text-anchor="middle" font-size="13" font-weight="700" fill="#999">🧠 主 控 芯 片</text>
+
+    <!-- ESP32-S3 Center -->
+    <rect x="310" y="146" width="700" height="175" rx="14" fill="#f8fafc" stroke="#2c3e50" stroke-width="2.5" filter="url(#shadow)"/>
+    <text x="660" y="172" text-anchor="middle" font-size="18" font-weight="800" fill="#2c3e50">ESP32-S3 (双核 Xtensa LX7 @ 240MHz)</text>
+
+    <!-- Core 0 -->
+    <rect x="340" y="188" width="310" height="56" rx="8" fill="#e8f0fe" stroke="#3498db" stroke-width="1"/>
+    <text x="495" y="208" text-anchor="middle" font-size="13" font-weight="700" fill="#2471a3">Core 0 (Protocol Core)</text>
+    <text x="495" y="226" text-anchor="middle" font-size="10" fill="#555">LVGL 主循环 · NimBLE Host · IDLE</text>
+    <text x="495" y="240" text-anchor="middle" font-size="9" fill="#999">SPI2 DMA | I2C x2 | I2S | GPIO</text>
+
+    <!-- Core 1 -->
+    <rect x="670" y="188" width="310" height="56" rx="8" fill="#e8f8f5" stroke="#1abc9c" stroke-width="1"/>
+    <text x="825" y="208" text-anchor="middle" font-size="13" font-weight="700" fill="#0e6655">Core 1 (Application Core)</text>
+    <text x="825" y="226" text-anchor="middle" font-size="10" fill="#555">sensor_mqtt · gesture · evt_proc · ai_button</text>
+    <text x="825" y="240" text-anchor="middle" font-size="9" fill="#999">voice_task · DHT11 · MQTT client · WSS client</text>
+
+    <!-- Memory -->
+    <rect x="340" y="252" width="310" height="30" rx="6" fill="#fef9e7" stroke="#f39c12" stroke-width="1"/>
+    <text x="495" y="271" text-anchor="middle" font-size="11" fill="#7d6608">💾 8MB Flash (Quad) ｜ 8MB Octal PSRAM</text>
+    <rect x="670" y="252" width="310" height="30" rx="6" fill="#f4ecf7" stroke="#9b59b6" stroke-width="1"/>
+    <text x="825" y="271" text-anchor="middle" font-size="11" fill="#6c3483">📦 NVS 24KB ｜ SPIFFS 4MB (语音模型)</text>
+
+    <!-- ===== BOTTOM: Peripherals ===== -->
+    <text x="660" y="340" text-anchor="middle" font-size="13" font-weight="700" fill="#999">🔌 外 设 与 传 感 器 层</text>
+
+    <!-- SPI Bus -->
+    <rect x="30" y="356" width="370" height="140" rx="10" fill="#fff8f0" stroke="#ff9800" stroke-width="1.2"/>
+    <text x="215" y="376" text-anchor="middle" font-size="13" font-weight="700" fill="#e65100">SPI2 总线 (MOSI=11, MISO=13, SCK=12, DMA)</text>
+
+    <!-- ILI9341 Display -->
+    <rect x="50" y="390" width="155" height="48" rx="7" fill="#f3e5f5" stroke="#9b59b6" stroke-width="1.2" filter="url(#shadow)"/>
+    <text x="127" y="410" text-anchor="middle" font-size="13" font-weight="700" fill="#6c3483">📺 ILI9341 LCD</text>
+    <text x="127" y="428" text-anchor="middle" font-size="10" fill="#888">320×240 · 16bpp · CS=10</text>
+
+    <!-- LVGL + Touch -->
+    <rect x="220" y="390" width="160" height="48" rx="7" fill="#f3e5f5" stroke="#9b59b6" stroke-width="1.2" filter="url(#shadow)"/>
+    <text x="300" y="410" text-anchor="middle" font-size="13" font-weight="700" fill="#6c3483">🖱️ FT6336 触摸</text>
+    <text x="300" y="428" text-anchor="middle" font-size="10" fill="#888">I2C_1 (0x38) · SDA=6,SCL=7</text>
+
+    <!-- LVGL -->
+    <rect x="140" y="446" width="150" height="40" rx="7" fill="#e8daef" stroke="#8e44ad" stroke-width="1" filter="url(#shadow)"/>
+    <text x="215" y="464" text-anchor="middle" font-size="12" font-weight="700" fill="#6c3483">🖼️ LVGL v8.4 UI</text>
+    <text x="215" y="480" text-anchor="middle" font-size="9" fill="#888">双缓冲 DMA · 5ms tick</text>
+
+    <!-- FONT -->
+    <rect x="50" y="446" width="75" height="40" rx="7" fill="#ebdef0" stroke="#9b59b6" stroke-width="1" filter="url(#shadow)"/>
+    <text x="87" y="464" text-anchor="middle" font-size="11" font-weight="700" fill="#6c3483">🔤 汉字</text>
+    <text x="87" y="480" text-anchor="middle" font-size="9" fill="#888">CJK 16px</text>
+
+    <!-- I2C Bus 0 -->
+    <rect x="430" y="356" width="300" height="140" rx="10" fill="#f0fafa" stroke="#00bcd4" stroke-width="1.2"/>
+    <text x="580" y="376" text-anchor="middle" font-size="13" font-weight="700" fill="#006064">I2C_NUM_0 总线 (SDA=9, SCL=8, 100kHz)</text>
+
+    <rect x="444" y="390" width="85" height="48" rx="7" fill="#e0f7fa" stroke="#00bcd4" stroke-width="1" filter="url(#shadow)"/>
+    <text x="486" y="410" text-anchor="middle" font-size="11" font-weight="700" fill="#006064">☀️ BH1750</text>
+    <text x="486" y="428" text-anchor="middle" font-size="9" fill="#888">光照 0x23</text>
+
+    <rect x="540" y="390" width="85" height="48" rx="7" fill="#e0f7fa" stroke="#00bcd4" stroke-width="1" filter="url(#shadow)"/>
+    <text x="582" y="410" text-anchor="middle" font-size="11" font-weight="700" fill="#006064">🌫️ SGP30</text>
+    <text x="582" y="428" text-anchor="middle" font-size="9" fill="#888">TVOC/CO2 0x58</text>
+
+    <rect x="636" y="390" width="80" height="48" rx="7" fill="#e0f7fa" stroke="#00bcd4" stroke-width="1" filter="url(#shadow)"/>
+    <text x="676" y="410" text-anchor="middle" font-size="11" font-weight="700" fill="#006064">👋 APDS9960</text>
+    <text x="676" y="428" text-anchor="middle" font-size="9" fill="#888">手势 0x39</text>
+
+    <rect x="470" y="446" width="230" height="40" rx="7" fill="#e0f2f1" stroke="#00897b" stroke-width="1"/>
+    <text x="585" y="464" text-anchor="middle" font-size="11" fill="#004d40">🔍 启动时 I2C 总线扫描 (地址 1-127) · 动态检测设备</text>
+
+    <!-- GPIO -->
+    <rect x="760" y="356" width="250" height="140" rx="10" fill="#f0faf0" stroke="#27ae60" stroke-width="1.2"/>
+    <text x="885" y="376" text-anchor="middle" font-size="13" font-weight="700" fill="#1b5e20">GPIO 直连设备</text>
+
+    <rect x="776" y="390" width="100" height="48" rx="7" fill="#e8f5e9" stroke="#27ae60" stroke-width="1" filter="url(#shadow)"/>
+    <text x="826" y="410" text-anchor="middle" font-size="11" font-weight="700" fill="#1b5e20">🌡️ DHT11</text>
+    <text x="826" y="428" text-anchor="middle" font-size="9" fill="#888">温湿度 GPIO38</text>
+
+    <rect x="890" y="390" width="105" height="48" rx="7" fill="#e8f5e9" stroke="#27ae60" stroke-width="1" filter="url(#shadow)"/>
+    <text x="942" y="410" text-anchor="middle" font-size="11" font-weight="700" fill="#1b5e20">🔘 BOOT 按钮</text>
+    <text x="942" y="428" text-anchor="middle" font-size="9" fill="#888">唤醒屏幕 GPIO0</text>
+
+    <!-- I2S Audio -->
+    <rect x="1040" y="356" width="250" height="140" rx="10" fill="#fdf0f5" stroke="#e91e63" stroke-width="1.2"/>
+    <text x="1165" y="376" text-anchor="middle" font-size="13" font-weight="700" fill="#880e4f">I2S_NUM_0 音频总线 (BCLK=4, LRC=5)</text>
+
+    <rect x="1055" y="390" width="105" height="48" rx="7" fill="#fce4ec" stroke="#e91e63" stroke-width="1" filter="url(#shadow)"/>
+    <text x="1107" y="410" text-anchor="middle" font-size="11" font-weight="700" fill="#880e4f">🎤 MEMS 麦克风</text>
+    <text x="1107" y="428" text-anchor="middle" font-size="9" fill="#888">I2S DIN=21</text>
+
+    <rect x="1175" y="390" width="100" height="48" rx="7" fill="#fce4ec" stroke="#e91e63" stroke-width="1" filter="url(#shadow)"/>
+    <text x="1225" y="410" text-anchor="middle" font-size="11" font-weight="700" fill="#880e4f">🔊 MAX98357</text>
+    <text x="1225" y="428" text-anchor="middle" font-size="9" fill="#888">功放 DOUT=3</text>
+
+    <rect x="1070" y="446" width="205" height="40" rx="7" fill="#f8bbd0" stroke="#c2185b" stroke-width="1"/>
+    <text x="1172" y="464" text-anchor="middle" font-size="11" fill="#880e4f">🎵 16kHz 16bit Mono · Opus 编解码</text>
+
+    <!-- ===== Wireless Layer ===== -->
+    <text x="660" y="524" text-anchor="middle" font-size="13" font-weight="700" fill="#999">📡 无 线 通 信 层</text>
+
+    <!-- WiFi -->
+    <rect x="340" y="540" width="310" height="90" rx="10" fill="#fff8e1" stroke="#e67e22" stroke-width="1.5" filter="url(#shadow)"/>
+    <text x="495" y="564" text-anchor="middle" font-size="14" font-weight="700" fill="#e65100">📶 WiFi STA (2.4GHz 802.11 b/g/n)</text>
+    <text x="495" y="584" text-anchor="middle" font-size="10" fill="#888">SSID: juxing · 自动重连 (最多5次)</text>
+    <text x="495" y="600" text-anchor="middle" font-size="10" fill="#888">DNS 回退: 114.114.114.114 / 8.8.8.8</text>
+    <text x="495" y="618" text-anchor="middle" font-size="10" fill="#888">SNTP 时间同步 · 证书包 (200+ 根证书)</text>
+
+    <!-- BLE -->
+    <rect x="670" y="540" width="310" height="90" rx="10" fill="#e3f2fd" stroke="#2196f3" stroke-width="1.5" filter="url(#shadow)"/>
+    <text x="825" y="564" text-anchor="middle" font-size="14" font-weight="700" fill="#0d47a1">🔵 BLE GATT 外设 (NimBLE)</text>
+    <text x="825" y="584" text-anchor="middle" font-size="10" fill="#888">广播名: "AIoT-SmartHome" · 自动重连</text>
+    <text x="825" y="600" text-anchor="middle" font-size="10" fill="#888">7个特征值: 温度/湿度/光照/TVOC/CO2/控制/WiFi</text>
+    <text x="825" y="618" text-anchor="middle" font-size="10" fill="#888">读+通知(传感器) / 写(控制命令)</text>
+
+    <!-- ===== BOTTOM: Data Flow ===== -->
+    <text x="660" y="658" text-anchor="middle" font-size="13" font-weight="700" fill="#999">🔄 数 据 流 向</text>
+
+    <!-- MQTT -->
+    <rect x="60" y="674" width="520" height="55" rx="10" fill="#ffebee" stroke="#e74c3c" stroke-width="1.2" filter="url(#shadow)"/>
+    <text x="320" y="696" text-anchor="middle" font-size="13" font-weight="700" fill="#b71c1c">📤 传感器数据上报 (每2秒) → OneNET MQTT 物模型属性上报</text>
+    <text x="320" y="716" text-anchor="middle" font-size="10" fill="#888">温度 · 湿度 · 光照 · TVOC · CO₂ → 平台可下发属性设置 / 服务调用</text>
+
+    <!-- Voice AI -->
+    <rect x="610" y="674" width="420" height="55" rx="10" fill="#e0f2f1" stroke="#1abc9c" stroke-width="1.2" filter="url(#shadow)"/>
+    <text x="820" y="696" text-anchor="middle" font-size="13" font-weight="700" fill="#004d40">🎙️ 语音对话: Mic → Opus编码 → WSS → 云端ASR→LLM→TTS → Opus解码 → 喇叭</text>
+    <text x="820" y="716" text-anchor="middle" font-size="10" fill="#888">唤醒词检测 (ESP-SR WakeNet) · 命令识别 (MultiNet) · 匿名设备注册</text>
+
+    <!-- LVGL UI -->
+    <rect x="60" y="740" width="520" height="48" rx="10" fill="#f4ecf7" stroke="#9b59b6" stroke-width="1.2" filter="url(#shadow)"/>
+    <text x="320" y="760" text-anchor="middle" font-size="13" font-weight="700" fill="#6c3483">🖥️ LVGL UI 四标签页: [传感器] [网络] [系统] [AI 聊天] + 状态栏</text>
+    <text x="320" y="778" text-anchor="middle" font-size="10" fill="#888">手势翻页 · 触摸交互 · 按钮唤醒 · 中文字体渲染</text>
+
+    <!-- BLE -->
+    <rect x="610" y="740" width="420" height="48" rx="10" fill="#e3f2fd" stroke="#2196f3" stroke-width="1.2" filter="url(#shadow)"/>
+    <text x="820" y="760" text-anchor="middle" font-size="13" font-weight="700" fill="#0d47a1">📱 手机APP: BLE GATT 读取传感器数据 + 下发控制指令</text>
+    <text x="820" y="778" text-anchor="middle" font-size="10" fill="#888">温度/湿度/光照/TVOC/CO2 (读+通知) · 控制命令如 light:1 / screen:0 (写)</text>
+
+    <!-- Connecting lines -->
+    <!-- Cloud to ESP32-S3 -->
+    <line x1="200" y1="108" x2="450" y2="146" stroke="#e74c3c" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arrowDown)"/>
+    <line x1="820" y1="108" x2="700" y2="146" stroke="#1abc9c" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arrowDown)"/>
+    <line x1="1155" y1="108" x2="900" y2="146" stroke="#ccc" stroke-width="1" stroke-dasharray="5,3" marker-end="url(#arrowDown)"/>
+
+    <!-- ESP32-S3 to peripherals -->
+    <line x1="400" y1="321" x2="215" y2="356" stroke="#ff9800" stroke-width="1.2" marker-end="url(#arrowDown)"/>
+    <line x1="550" y1="321" x2="580" y2="356" stroke="#00bcd4" stroke-width="1.2" marker-end="url(#arrowDown)"/>
+    <line x1="830" y1="321" x2="885" y2="356" stroke="#27ae60" stroke-width="1.2" marker-end="url(#arrowDown)"/>
+    <line x1="1050" y1="321" x2="1165" y2="356" stroke="#e91e63" stroke-width="1.2" marker-end="url(#arrowDown)"/>
+
+    <!-- ESP32-S3 to wireless -->
+    <line x1="495" y1="321" x2="495" y2="540" stroke="#e67e22" stroke-width="1.2" marker-end="url(#arrowDown)"/>
+    <line x1="825" y1="321" x2="825" y2="540" stroke="#2196f3" stroke-width="1.2" marker-end="url(#arrowDown)"/>
+  </svg>
+
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#e74c3c"></div> OneNET 云</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#1abc9c"></div> XiaoZhi AI</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#ff9800"></div> SPI 总线</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#00bcd4"></div> I2C 总线</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#27ae60"></div> GPIO 直连</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#e91e63"></div> I2S 音频</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#e67e22"></div> WiFi</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#2196f3"></div> BLE</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#9b59b6"></div> 显示/UI</div>
+  </div>
+</div>
+
+<!-- ==================== 2. DATA FLOW ==================== -->
+<div class="diagram-section">
+  <h2>🔄 二、传感器数据流</h2>
+  <svg viewBox="0 0 1300 420" width="100%" height="100%" style="max-height:420px;">
+    <defs>
+      <filter id="shadow2" x="-2%" y="-2%" width="104%" height="104%">
+        <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#00000015"/>
+      </filter>
+      <marker id="arr" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+        <path d="M0,0 L8,3 L0,6 Z" fill="#555"/>
+      </marker>
+    </defs>
+
+    <!-- Sensors column -->
+    <text x="100" y="28" text-anchor="middle" font-size="13" font-weight="700" fill="#888">传感器采集</text>
+    <rect x="10" y="40" width="180" height="50" rx="8" fill="#e8f5e9" stroke="#27ae60" stroke-width="1.2" filter="url(#shadow2)"/>
+    <text x="100" y="61" text-anchor="middle" font-size="13" font-weight="700" fill="#1b5e20">🌡️ DHT11</text>
+    <text x="100" y="79" text-anchor="middle" font-size="10" fill="#666">GPIO38 · 1-Wire · 每2秒</text>
+
+    <rect x="10" y="105" width="180" height="50" rx="8" fill="#e0f7fa" stroke="#00bcd4" stroke-width="1.2" filter="url(#shadow2)"/>
+    <text x="100" y="126" text-anchor="middle" font-size="13" font-weight="700" fill="#006064">☀️ BH1750</text>
+    <text x="100" y="144" text-anchor="middle" font-size="10" fill="#666">I2C_0 0x23 · 连续高分辨率</text>
+
+    <rect x="10" y="170" width="180" height="50" rx="8" fill="#e0f7fa" stroke="#00bcd4" stroke-width="1.2" filter="url(#shadow2)"/>
+    <text x="100" y="191" text-anchor="middle" font-size="13" font-weight="700" fill="#006064">🌫️ SGP30</text>
+    <text x="100" y="209" text-anchor="middle" font-size="10" fill="#666">I2C_0 0x58 · CRC8 · NVS基线</text>
+
+    <rect x="10" y="235" width="180" height="50" rx="8" fill="#e0f7fa" stroke="#00bcd4" stroke-width="1.2" filter="url(#shadow2)"/>
+    <text x="100" y="256" text-anchor="middle" font-size="13" font-weight="700" fill="#006064">👋 APDS9960</text>
+    <text x="100" y="274" text-anchor="middle" font-size="10" fill="#666">I2C_0 0x39 · 手势FIFO · 100ms</text>
+
+    <rect x="10" y="300" width="180" height="50" rx="8" fill="#fce4ec" stroke="#e91e63" stroke-width="1.2" filter="url(#shadow2)"/>
+    <text x="100" y="321" text-anchor="middle" font-size="13" font-weight="700" fill="#880e4f">🎤 I2S 麦克风</text>
+    <text x="100" y="339" text-anchor="middle" font-size="10" fill="#666">16kHz 16bit · 环形缓冲</text>
+
+    <!-- Arrow 1 -->
+    <line x1="190" y1="150" x2="240" y2="150" stroke="#888" stroke-width="2" marker-end="url(#arr)"/>
+
+    <!-- Processing column -->
+    <text x="340" y="28" text-anchor="middle" font-size="13" font-weight="700" fill="#888">数据处理 & 滤波</text>
+    <rect x="240" y="50" width="200" height="110" rx="10" fill="#f8fafc" stroke="#2c3e50" stroke-width="1.5" filter="url(#shadow2)"/>
+    <text x="340" y="74" text-anchor="middle" font-size="13" font-weight="700" fill="#2c3e50">sensor_mqtt_task</text>
+    <text x="340" y="94" text-anchor="middle" font-size="10" fill="#666">(Core 1, 优先级 2, 每2秒)</text>
+    <line x1="260" y1="104" x2="420" y2="104" stroke="#eee" stroke-width="1"/>
+    <text x="340" y="118" text-anchor="middle" font-size="10" fill="#555">5样本滑动窗口滤波</text>
+    <text x="340" y="134" text-anchor="middle" font-size="10" fill="#555">CRC8 校验 · 范围过滤</text>
+    <text x="340" y="150" text-anchor="middle" font-size="10" fill="#555">自动故障检测 & 恢复</text>
+
+    <rect x="240" y="175" width="200" height="60" rx="10" fill="#f8fafc" stroke="#2c3e50" stroke-width="1.5" filter="url(#shadow2)"/>
+    <text x="340" y="198" text-anchor="middle" font-size="13" font-weight="700" fill="#2c3e50">gesture_task</text>
+    <text x="340" y="216" text-anchor="middle" font-size="10" fill="#666">(Core 1, 优先级 3, 每100ms)</text>
+    <text x="340" y="230" text-anchor="middle" font-size="10" fill="#555">手势FIFO解析 → 事件队列</text>
+
+    <rect x="240" y="250" width="200" height="80" rx="10" fill="#fdf0f5" stroke="#e91e63" stroke-width="1.5" filter="url(#shadow2)"/>
+    <text x="340" y="274" text-anchor="middle" font-size="13" font-weight="700" fill="#880e4f">voice_task / xiaozi_ai</text>
+    <text x="340" y="294" text-anchor="middle" font-size="10" fill="#666">(Core 1, PSRAM堆栈 16KB)</text>
+    <text x="340" y="310" text-anchor="middle" font-size="10" fill="#555">AFE前处理 → WakeNet唤醒词</text>
+    <text x="340" y="324" text-anchor="middle" font-size="10" fill="#555">→ MultiNet命令识别</text>
+
+    <!-- Arrow 2 -->
+    <line x1="440" y1="150" x2="490" y2="150" stroke="#888" stroke-width="2" marker-end="url(#arr)"/>
+
+    <!-- Output column -->
+    <text x="640" y="28" text-anchor="middle" font-size="13" font-weight="700" fill="#888">数据输出 & 上报</text>
+
+    <!-- OneNET MQTT -->
+    <rect x="490" y="40" width="300" height="110" rx="10" fill="#ffebee" stroke="#e74c3c" stroke-width="1.5" filter="url(#shadow2)"/>
+    <text x="640" y="64" text-anchor="middle" font-size="13" font-weight="700" fill="#b71c1c">🔴 OneNET MQTT (TLS 1.2)</text>
+    <line x1="510" y1="76" x2="770" y2="76" stroke="#fdd" stroke-width="1"/>
+    <text x="640" y="94" text-anchor="middle" font-size="10" fill="#555">Topic: thing/property/post</text>
+    <text x="640" y="110" text-anchor="middle" font-size="10" fill="#555">JSON: {temp, humi, light, tvoc, co2}</text>
+    <text x="640" y="126" text-anchor="middle" font-size="10" fill="#555">每2秒上报 · 指数退避重连</text>
+    <text x="640" y="142" text-anchor="middle" font-size="10" fill="#555">可接收: 属性设置/查询/服务调用</text>
+
+    <!-- BLE -->
+    <rect x="490" y="165" width="300" height="80" rx="10" fill="#e3f2fd" stroke="#2196f3" stroke-width="1.5" filter="url(#shadow2)"/>
+    <text x="640" y="189" text-anchor="middle" font-size="13" font-weight="700" fill="#0d47a1">🔵 BLE GATT (NimBLE)</text>
+    <line x1="510" y1="200" x2="770" y2="200" stroke="#dde" stroke-width="1"/>
+    <text x="640" y="218" text-anchor="middle" font-size="10" fill="#555">读+通知: 温度/湿度/光照/TVOC/CO2/WiFi</text>
+    <text x="640" y="236" text-anchor="middle" font-size="10" fill="#555">写: 控制命令 (light:1, screen:0)</text>
+
+    <!-- LVGL UI -->
+    <rect x="490" y="260" width="300" height="80" rx="10" fill="#f4ecf7" stroke="#9b59b6" stroke-width="1.5" filter="url(#shadow2)"/>
+    <text x="640" y="284" text-anchor="middle" font-size="13" font-weight="700" fill="#6c3483">🖥️ LVGL UI 显示</text>
+    <line x1="510" y1="296" x2="770" y2="296" stroke="#ede" stroke-width="1"/>
+    <text x="640" y="314" text-anchor="middle" font-size="10" fill="#555">lv_async_call 线程安全更新</text>
+    <text x="640" y="330" text-anchor="middle" font-size="10" fill="#555">传感器卡片实时刷新</text>
+
+    <!-- Arrow 3 -->
+    <line x1="790" y1="150" x2="840" y2="150" stroke="#888" stroke-width="2" marker-end="url(#arr)"/>
+
+    <!-- Cloud column -->
+    <text x="960" y="28" text-anchor="middle" font-size="13" font-weight="700" fill="#888">云端 & 用户</text>
+
+    <rect x="840" y="40" width="240" height="80" rx="10" fill="#fff5f5" stroke="#e74c3c" stroke-width="1.5" filter="url(#shadow2)"/>
+    <text x="960" y="64" text-anchor="middle" font-size="13" font-weight="700" fill="#b71c1c">OneNET 云平台</text>
+    <text x="960" y="84" text-anchor="middle" font-size="10" fill="#555">数据看板 · 设备管理</text>
+    <text x="960" y="102" text-anchor="middle" font-size="10" fill="#555">远程控制 · 规则引擎</text>
+
+    <rect x="840" y="135" width="240" height="80" rx="10" fill="#f0faf8" stroke="#1abc9c" stroke-width="1.5" filter="url(#shadow2)"/>
+    <text x="960" y="159" text-anchor="middle" font-size="13" font-weight="700" fill="#0e6655">XiaoZhi AI 云助手</text>
+    <text x="960" y="179" text-anchor="middle" font-size="10" fill="#555">ASR → LLM → TTS</text>
+    <text x="960" y="197" text-anchor="middle" font-size="10" fill="#555">xiaozhi.me 设备绑定</text>
+
+    <rect x="840" y="230" width="240" height="80" rx="10" fill="#e3f2fd" stroke="#2196f3" stroke-width="1.5" filter="url(#shadow2)"/>
+    <text x="960" y="254" text-anchor="middle" font-size="13" font-weight="700" fill="#0d47a1">📱 手机 BLE App</text>
+    <text x="960" y="274" text-anchor="middle" font-size="10" fill="#555">传感器实时数据</text>
+    <text x="960" y="292" text-anchor="middle" font-size="10" fill="#555">设备远程控制</text>
+
+    <rect x="840" y="325" width="240" height="50" rx="10" fill="#fafafa" stroke="#ccc" stroke-width="1" filter="url(#shadow2)"/>
+    <text x="960" y="349" text-anchor="middle" font-size="13" font-weight="700" fill="#666">🌐 Web 仪表盘 (规划中)</text>
+    <text x="960" y="366" text-anchor="middle" font-size="10" fill="#888">web-dashboard/ 目录</text>
+  </svg>
+</div>
+
+<!-- ==================== 3. FreeRTOS TASKS ==================== -->
+<div class="diagram-section">
+  <h2>⚙️ 三、FreeRTOS 任务架构 & 双核分配</h2>
+  <svg viewBox="0 0 1300 480" width="100%" height="100%" style="max-height:480px;">
+    <defs>
+      <filter id="shadow3" x="-2%" y="-2%" width="104%" height="104%">
+        <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#00000012"/>
+      </filter>
+    </defs>
+
+    <!-- Core 0 -->
+    <rect x="20" y="20" width="610" height="440" rx="12" fill="#f0f6fd" stroke="#3498db" stroke-width="2"/>
+    <text x="325" y="50" text-anchor="middle" font-size="16" font-weight="800" fill="#2471a3">Core 0 — 协议核 (Protocol Core)</text>
+
+    <rect x="45" y="70" width="560" height="65" rx="8" fill="white" stroke="#3498db" stroke-width="1" filter="url(#shadow3)"/>
+    <text x="325" y="93" text-anchor="middle" font-size="14" font-weight="700" fill="#2c3e50">🖥️ app_main → LVGL 主循环</text>
+    <text x="325" y="113" text-anchor="middle" font-size="11" fill="#666">lv_timer_handler() 每5ms刷新 · 双缓冲DMA · disp_flush回调 · touchpad_read回调</text>
+    <text x="325" y="129" text-anchor="middle" font-size="10" fill="#888">占用时间: 持续运行 (阻塞在 lv_timer_handler)</text>
+
+    <rect x="45" y="148" width="560" height="50" rx="8" fill="white" stroke="#3498db" stroke-width="1" filter="url(#shadow3)"/>
+    <text x="325" y="170" text-anchor="middle" font-size="14" font-weight="700" fill="#2c3e50">🔵 NimBLE Host 任务</text>
+    <text x="325" y="188" text-anchor="middle" font-size="11" fill="#666">BLE GATT 服务 · 7个特征值 · 广播 · 连接管理 · 自动重连</text>
+
+    <rect x="45" y="211" width="560" height="40" rx="8" fill="#fafafa" stroke="#ddd" stroke-width="1" filter="url(#shadow3)"/>
+    <text x="325" y="236" text-anchor="middle" font-size="13" font-weight="700" fill="#888">💤 IDLE 任务</text>
+
+    <!-- Core 1 -->
+    <rect x="670" y="20" width="610" height="440" rx="12" fill="#f0faf7" stroke="#1abc9c" stroke-width="2"/>
+    <text x="975" y="50" text-anchor="middle" font-size="16" font-weight="800" fill="#0e6655">Core 1 — 应用核 (Application Core)</text>
+
+    <rect x="695" y="70" width="275" height="65" rx="8" fill="white" stroke="#1abc9c" stroke-width="1" filter="url(#shadow3)"/>
+    <text x="832" y="93" text-anchor="middle" font-size="13" font-weight="700" fill="#2c3e50">📡 sensor_mqtt_task</text>
+    <text x="832" y="113" text-anchor="middle" font-size="10" fill="#666">优先级 2 · 堆栈 4KB · 每2秒</text>
+    <text x="832" y="129" text-anchor="middle" font-size="10" fill="#666">读传感器→MQTT上报→BLE更新→UI刷新</text>
+
+    <rect x="985" y="70" width="270" height="65" rx="8" fill="white" stroke="#1abc9c" stroke-width="1" filter="url(#shadow3)"/>
+    <text x="1120" y="93" text-anchor="middle" font-size="13" font-weight="700" fill="#2c3e50">👋 gesture_task</text>
+    <text x="1120" y="113" text-anchor="middle" font-size="10" fill="#666">优先级 3 · 堆栈 3KB · 每100ms</text>
+    <text x="1120" y="129" text-anchor="middle" font-size="10" fill="#666">APDS9960手势检测→事件队列</text>
+
+    <rect x="695" y="148" width="275" height="55" rx="8" fill="white" stroke="#1abc9c" stroke-width="1" filter="url(#shadow3)"/>
+    <text x="832" y="170" text-anchor="middle" font-size="13" font-weight="700" fill="#2c3e50">📨 evt_proc (事件处理器)</text>
+    <text x="832" y="190" text-anchor="middle" font-size="10" fill="#666">优先级 4 · 堆栈 4KB · 队列驱动</text>
+    <text x="832" y="204" text-anchor="middle" font-size="10" fill="#666">手势事件→LVGL页面切换</text>
+
+    <rect x="985" y="148" width="270" height="55" rx="8" fill="white" stroke="#1abc9c" stroke-width="1" filter="url(#shadow3)"/>
+    <text x="1120" y="170" text-anchor="middle" font-size="13" font-weight="700" fill="#2c3e50">🔘 ai_button_task</text>
+    <text x="1120" y="190" text-anchor="middle" font-size="10" fill="#666">优先级 3 · 堆栈 4KB · 每50ms</text>
+    <text x="1120" y="204" text-anchor="middle" font-size="10" fill="#666">GPIO0 短按→屏幕唤醒</text>
+
+    <rect x="695" y="216" width="275" height="55" rx="8" fill="white" stroke="#1abc9c" stroke-width="1" filter="url(#shadow3)"/>
+    <text x="832" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#2c3e50">🌡️ dht11_task</text>
+    <text x="832" y="258" text-anchor="middle" font-size="10" fill="#666">优先级 1 · 堆栈 4KB · 每2秒</text>
+    <text x="832" y="272" text-anchor="middle" font-size="10" fill="#666">DHT11 位带读取 · CRC8 · 滤波</text>
+
+    <rect x="985" y="216" width="270" height="55" rx="8" fill="white" stroke="#1abc9c" stroke-width="1" filter="url(#shadow3)"/>
+    <text x="1120" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#2c3e50">🎵 voice_task</text>
+    <text x="1120" y="258" text-anchor="middle" font-size="10" fill="#666">优先级 2 · 堆栈 16KB (PSRAM)</text>
+    <text x="1120" y="272" text-anchor="middle" font-size="10" fill="#666">I2S RX→环形缓冲→AFE→唤醒词/命令</text>
+
+    <rect x="695" y="284" width="275" height="55" rx="8" fill="white" stroke="#1abc9c" stroke-width="1" filter="url(#shadow3)"/>
+    <text x="832" y="306" text-anchor="middle" font-size="13" font-weight="700" fill="#2c3e50">📶 MQTT Client 任务</text>
+    <text x="832" y="326" text-anchor="middle" font-size="10" fill="#666">优先级 5 · 堆栈 4KB · 事件驱动</text>
+    <text x="832" y="340" text-anchor="middle" font-size="10" fill="#666">TLS握手·订阅·发布·Keepalive 120s</text>
+
+    <rect x="985" y="284" width="270" height="55" rx="8" fill="white" stroke="#1abc9c" stroke-width="1" filter="url(#shadow3)"/>
+    <text x="1120" y="306" text-anchor="middle" font-size="13" font-weight="700" fill="#2c3e50">🌐 WSS / Opus 任务</text>
+    <text x="1120" y="326" text-anchor="middle" font-size="10" fill="#666">esp_websocket_client 内部任务</text>
+    <text x="1120" y="340" text-anchor="middle" font-size="10" fill="#666">Opus编码/解码·音频收发·MCP协议</text>
+
+    <!-- System tasks row -->
+    <rect x="695" y="358" width="560" height="45" rx="8" fill="#fef9e7" stroke="#f39c12" stroke-width="1" filter="url(#shadow3)"/>
+    <text x="975" y="378" text-anchor="middle" font-size="12" font-weight="700" fill="#7d6608">系统任务 (ESP-IDF自动创建): lwIP (prio 18) · WiFi · esp_timer · 空闲任务</text>
+    <text x="975" y="396" text-anchor="middle" font-size="10" fill="#b7950b">共享资源: NVS (WiFi配置/基线/UUID) · SPIFFS (语音模型) · I2C总线互斥锁 · 环形缓冲临界区</text>
+
+    <!-- Core label bottom -->
+    <rect x="695" y="418" width="560" height="32" rx="6" fill="#e8f8f5" stroke="#1abc9c" stroke-width="1"/>
+    <text x="975" y="439" text-anchor="middle" font-size="12" fill="#0e6655">⚡ 总任务数: ~12个 · 传感器数据流: 2秒周期 · 手势检测: 100ms周期 · AI语音: 实时双向音频流</text>
+  </svg>
+</div>
+
+<!-- ==================== 4. PARTITION & SOFTWARE ==================== -->
+<div class="grid-2">
+  <div class="diagram-section">
+    <h2>💾 四、Flash 分区表 (8MB)</h2>
+    <svg viewBox="0 0 620 240" width="100%" height="240">
+      <!-- 8MB total bar -->
+      <rect x="20" y="30" width="580" height="40" rx="6" fill="#eee" stroke="#ccc" stroke-width="1"/>
+      <text x="310" y="55" text-anchor="middle" font-size="12" font-weight="700" fill="#888">8MB Flash (0x000000 - 0x800000)</text>
+
+      <!-- NVS -->
+      <rect x="20" y="85" width="35" height="35" rx="5" fill="#3498db"/>
+      <text x="37" y="107" text-anchor="middle" font-size="9" font-weight="700" fill="white">NVS</text>
+      <line x1="37" y1="120" x2="37" y2="140" stroke="#ccc" stroke-width="1" stroke-dasharray="3,2"/>
+      <text x="37" y="155" text-anchor="middle" font-size="9" fill="#666">24KB</text>
+      <text x="37" y="168" text-anchor="middle" font-size="8" fill="#aaa">0x9000</text>
+
+      <!-- phy_init -->
+      <rect x="65" y="85" width="18" height="35" rx="5" fill="#95a5a6"/>
+      <text x="74" y="107" text-anchor="middle" font-size="8" font-weight="700" fill="white">phy</text>
+      <line x1="74" y1="120" x2="74" y2="140" stroke="#ccc" stroke-width="1" stroke-dasharray="3,2"/>
+      <text x="74" y="155" text-anchor="middle" font-size="9" fill="#666">4KB</text>
+      <text x="74" y="168" text-anchor="middle" font-size="8" fill="#aaa">0xF000</text>
+
+      <!-- factory -->
+      <rect x="93" y="85" width="265" height="35" rx="5" fill="#2c3e50"/>
+      <text x="225" y="107" text-anchor="middle" font-size="12" font-weight="700" fill="white">Factory App (固件)</text>
+      <line x1="225" y1="120" x2="225" y2="140" stroke="#ccc" stroke-width="1" stroke-dasharray="3,2"/>
+      <text x="225" y="155" text-anchor="middle" font-size="9" fill="#666">2.5MB</text>
+      <text x="225" y="168" text-anchor="middle" font-size="8" fill="#aaa">0x10000</text>
+
+      <!-- model -->
+      <rect x="368" y="85" width="232" height="35" rx="5" fill="#9b59b6"/>
+      <text x="484" y="107" text-anchor="middle" font-size="12" font-weight="700" fill="white">SPIFFS Model (语音模型)</text>
+      <line x1="484" y1="120" x2="484" y2="140" stroke="#ccc" stroke-width="1" stroke-dasharray="3,2"/>
+      <text x="484" y="155" text-anchor="middle" font-size="9" fill="#666">4MB</text>
+      <text x="484" y="168" text-anchor="middle" font-size="8" fill="#aaa">自动偏移</text>
+
+      <!-- Content desc -->
+      <text x="37" y="198" text-anchor="middle" font-size="9" fill="#888">WiFi配置</text>
+      <text x="37" y="212" text-anchor="middle" font-size="9" fill="#888">SGP30基线</text>
+      <text x="37" y="226" text-anchor="middle" font-size="9" fill="#888">设备UUID</text>
+
+      <text x="225" y="198" text-anchor="middle" font-size="9" fill="#888">main.c · ui.c</text>
+      <text x="225" y="212" text-anchor="middle" font-size="9" fill="#888">12个自研组件</text>
+      <text x="225" y="226" text-anchor="middle" font-size="9" fill="#888">6个托管组件</text>
+
+      <text x="484" y="198" text-anchor="middle" font-size="9" fill="#888">ESP-SR (AFE/WakeNet/MultiNet)</text>
+      <text x="484" y="212" text-anchor="middle" font-size="9" fill="#888">Opus 编解码器模型</text>
+      <text x="484" y="226" text-anchor="middle" font-size="9" fill="#888">DSP/FFT 算法库</text>
+    </svg>
+  </div>
+
+  <div class="diagram-section">
+    <h2>🧩 五、软件组件依赖关系</h2>
+    <div style="font-size:13px; line-height:2;">
+      <table class="info-table">
+        <tr><th style="width:30%">层级</th><th>组件</th></tr>
+        <tr>
+          <td><b>应用层</b></td>
+          <td>
+            <code>main.c</code> (app_main + 4个任务) ·
+            <code>ui.c</code> (LVGL 4标签页UI)
+          </td>
+        </tr>
+        <tr>
+          <td><b>自研组件 (12个)</b></td>
+          <td>
+            <span class="tag tag-wifi">WIFI</span>
+            <span class="tag tag-ble">BLE</span>
+            <span class="tag tag-mqtt">MY_MQTT</span>
+            <span class="tag tag-wss">XIAOZHI_AI</span>
+            <span class="tag tag-i2s">VOICE</span>
+            <span class="tag tag-spi">DISPLAY</span>
+            <span class="tag tag-i2c">TOUCH</span>
+            <span class="tag tag-spi">LVGL_PORT</span>
+            <span class="tag tag-i2c">DHT11</span>
+            <span class="tag tag-i2c">BH1750</span>
+            <span class="tag tag-i2c">SGP30</span>
+            <span class="tag tag-i2c">APDS9960</span>
+          </td>
+        </tr>
+        <tr>
+          <td><b>托管组件 (6个)</b></td>
+          <td>
+            <span class="tag" style="background:#e8f5e9;color:#1b5e20;">lvgl ^8.4</span>
+            <span class="tag" style="background:#fce4ec;color:#880e4f;">esp-sr ^2.0</span>
+            <span class="tag" style="background:#e0f7fa;color:#006064;">esp-opus ^1.0</span>
+            <span class="tag" style="background:#fff3e0;color:#e65100;">esp_lcd_ili9341</span>
+            <span class="tag" style="background:#f3e5f5;color:#4a148c;">esp_websocket_client</span>
+            <span class="tag" style="background:#fff8e1;color:#e65100;">cJSON</span>
+          </td>
+        </tr>
+        <tr>
+          <td><b>框架层</b></td>
+          <td>ESP-IDF v5.1.2 · FreeRTOS · LWIP · mbedTLS · NimBLE · SPI/I2C/I2S 驱动</td>
+        </tr>
+        <tr>
+          <td><b>编译选项</b></td>
+          <td><code>-O3 -ffast-math -Wno-error=format</code> · CMake · IDF Component Manager</td>
+        </tr>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 5. PIN MAP ==================== -->
+<div class="diagram-section">
+  <h2>🔌 六、引脚映射总览 (Pin Map)</h2>
+  <svg viewBox="0 0 1280 320" width="100%" height="100%" style="max-height:320px;">
+    <defs>
+      <filter id="shadow4" x="-2%" y="-2%" width="104%" height="104%">
+        <feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="#00000012"/>
+      </filter>
+    </defs>
+
+    <!-- ESP32-S3 chip outline -->
+    <rect x="440" y="10" width="400" height="300" rx="16" fill="#f8fafc" stroke="#2c3e50" stroke-width="2.5" filter="url(#shadow4)"/>
+    <text x="640" y="38" text-anchor="middle" font-size="16" font-weight="800" fill="#2c3e50">ESP32-S3</text>
+    <text x="640" y="56" text-anchor="middle" font-size="10" fill="#888">QFN56 · 240MHz · 双核 · 8MB Flash + 8MB PSRAM</text>
+
+    <!-- Left side pins (GPIOs) -->
+    <!-- GPIO0 -->
+    <rect x="415" y="75" width="25" height="22" rx="3" fill="#27ae60"/>
+    <text x="427" y="90" text-anchor="middle" font-size="7" fill="white" font-weight="700">IO0</text>
+    <line x1="415" y1="86" x2="340" y2="86" stroke="#27ae60" stroke-width="1.2"/>
+    <rect x="220" y="74" width="120" height="24" rx="5" fill="#e8f5e9" stroke="#27ae60" stroke-width="0.8" filter="url(#shadow4)"/>
+    <text x="280" y="90" text-anchor="middle" font-size="9" fill="#1b5e20">🔘 BOOT 按钮</text>
+
+    <!-- GPIO2 -->
+    <rect x="415" y="103" width="25" height="22" rx="3" fill="#00bcd4"/>
+    <text x="427" y="118" text-anchor="middle" font-size="7" fill="white" font-weight="700">IO2</text>
+    <line x1="415" y1="114" x2="340" y2="114" stroke="#00bcd4" stroke-width="1.2"/>
+    <rect x="220" y="102" width="120" height="24" rx="5" fill="#e0f7fa" stroke="#00bcd4" stroke-width="0.8" filter="url(#shadow4)"/>
+    <text x="280" y="118" text-anchor="middle" font-size="9" fill="#006064">APDS9960 INT</text>
+
+    <!-- GPIO3 (DOUT) -->
+    <rect x="415" y="131" width="25" height="22" rx="3" fill="#e91e63"/>
+    <text x="427" y="146" text-anchor="middle" font-size="7" fill="white" font-weight="700">IO3</text>
+    <line x1="415" y1="142" x2="340" y2="142" stroke="#e91e63" stroke-width="1.2"/>
+    <rect x="220" y="130" width="120" height="24" rx="5" fill="#fce4ec" stroke="#e91e63" stroke-width="0.8" filter="url(#shadow4)"/>
+    <text x="280" y="146" text-anchor="middle" font-size="9" fill="#880e4f">🔊 I2S DOUT</text>
+
+    <!-- GPIO4 (BCLK) -->
+    <rect x="415" y="159" width="25" height="22" rx="3" fill="#e91e63"/>
+    <text x="427" y="174" text-anchor="middle" font-size="7" fill="white" font-weight="700">IO4</text>
+    <line x1="415" y1="170" x2="340" y2="170" stroke="#e91e63" stroke-width="1.2"/>
+    <rect x="220" y="158" width="120" height="24" rx="5" fill="#fce4ec" stroke="#e91e63" stroke-width="0.8" filter="url(#shadow4)"/>
+    <text x="280" y="174" text-anchor="middle" font-size="9" fill="#880e4f">🎵 I2S BCLK</text>
+
+    <!-- GPIO5 (LRC) -->
+    <rect x="415" y="187" width="25" height="22" rx="3" fill="#e91e63"/>
+    <text x="427" y="202" text-anchor="middle" font-size="7" fill="white" font-weight="700">IO5</text>
+    <line x1="415" y1="198" x2="340" y2="198" stroke="#e91e63" stroke-width="1.2"/>
+    <rect x="220" y="186" width="120" height="24" rx="5" fill="#fce4ec" stroke="#e91e63" stroke-width="0.8" filter="url(#shadow4)"/>
+    <text x="280" y="202" text-anchor="middle" font-size="9" fill="#880e4f">🎵 I2S LRC</text>
+
+    <!-- GPIO38 (DHT11) -->
+    <rect x="415" y="215" width="25" height="22" rx="3" fill="#27ae60"/>
+    <text x="427" y="230" text-anchor="middle" font-size="7" fill="white" font-weight="700">38</text>
+    <line x1="415" y1="226" x2="340" y2="226" stroke="#27ae60" stroke-width="1.2"/>
+    <rect x="220" y="214" width="120" height="24" rx="5" fill="#e8f5e9" stroke="#27ae60" stroke-width="0.8" filter="url(#shadow4)"/>
+    <text x="280" y="230" text-anchor="middle" font-size="9" fill="#1b5e20">🌡️ DHT11 数据</text>
+
+    <!-- Right side pins -->
+    <!-- GPIO6 (I2C1 SDA) -->
+    <rect x="840" y="75" width="25" height="22" rx="3" fill="#00bcd4"/>
+    <text x="852" y="90" text-anchor="middle" font-size="7" fill="white" font-weight="700">IO6</text>
+    <line x1="840" y1="86" x2="940" y2="86" stroke="#00bcd4" stroke-width="1.2"/>
+    <rect x="940" y="74" width="130" height="24" rx="5" fill="#e0f7fa" stroke="#00bcd4" stroke-width="0.8" filter="url(#shadow4)"/>
+    <text x="1005" y="90" text-anchor="middle" font-size="9" fill="#006064">I2C_1 SDA (触摸)</text>
+
+    <!-- GPIO7 (I2C1 SCL) -->
+    <rect x="840" y="103" width="25" height="22" rx="3" fill="#00bcd4"/>
+    <text x="852" y="118" text-anchor="middle" font-size="7" fill="white" font-weight="700">IO7</text>
+    <line x1="840" y1="114" x2="940" y2="114" stroke="#00bcd4" stroke-width="1.2"/>
+    <rect x="940" y="102" width="130" height="24" rx="5" fill="#e0f7fa" stroke="#00bcd4" stroke-width="0.8" filter="url(#shadow4)"/>
+    <text x="1005" y="118" text-anchor="middle" font-size="9" fill="#006064">I2C_1 SCL (触摸)</text>
+
+    <!-- GPIO8 (I2C0 SCL) -->
+    <rect x="840" y="131" width="25" height="22" rx="3" fill="#00bcd4"/>
+    <text x="852" y="146" text-anchor="middle" font-size="7" fill="white" font-weight="700">IO8</text>
+    <line x1="840" y1="142" x2="940" y2="142" stroke="#00bcd4" stroke-width="1.2"/>
+    <rect x="940" y="130" width="130" height="24" rx="5" fill="#e0f7fa" stroke="#00bcd4" stroke-width="0.8" filter="url(#shadow4)"/>
+    <text x="1005" y="146" text-anchor="middle" font-size="9" fill="#006064">I2C_0 SCL (传感器)</text>
+
+    <!-- GPIO9 (I2C0 SDA) -->
+    <rect x="840" y="159" width="25" height="22" rx="3" fill="#00bcd4"/>
+    <text x="852" y="174" text-anchor="middle" font-size="7" fill="white" font-weight="700">IO9</text>
+    <line x1="840" y1="170" x2="940" y2="170" stroke="#00bcd4" stroke-width="1.2"/>
+    <rect x="940" y="158" width="130" height="24" rx="5" fill="#e0f7fa" stroke="#00bcd4" stroke-width="0.8" filter="url(#shadow4)"/>
+    <text x="1005" y="174" text-anchor="middle" font-size="9" fill="#006064">I2C_0 SDA (传感器)</text>
+
+    <!-- SPI pins -->
+    <rect x="840" y="187" width="25" height="22" rx="3" fill="#ff9800"/>
+    <text x="852" y="202" text-anchor="middle" font-size="7" fill="white" font-weight="700">10</text>
+    <line x1="840" y1="198" x2="940" y2="198" stroke="#ff9800" stroke-width="1.2"/>
+    <rect x="940" y="186" width="130" height="24" rx="5" fill="#fff3e0" stroke="#ff9800" stroke-width="0.8" filter="url(#shadow4)"/>
+    <text x="1005" y="202" text-anchor="middle" font-size="9" fill="#e65100">SPI2 CS (LCD)</text>
+
+    <rect x="840" y="215" width="25" height="22" rx="3" fill="#ff9800"/>
+    <text x="852" y="230" text-anchor="middle" font-size="7" fill="white" font-weight="700">11</text>
+    <line x1="840" y1="226" x2="940" y2="226" stroke="#ff9800" stroke-width="1.2"/>
+    <rect x="940" y="214" width="130" height="24" rx="5" fill="#fff3e0" stroke="#ff9800" stroke-width="0.8" filter="url(#shadow4)"/>
+    <text x="1005" y="230" text-anchor="middle" font-size="9" fill="#e65100">SPI2 MOSI (LCD)</text>
+
+    <rect x="840" y="243" width="25" height="22" rx="3" fill="#ff9800"/>
+    <text x="852" y="258" text-anchor="middle" font-size="7" fill="white" font-weight="700">12</text>
+    <line x1="840" y1="254" x2="940" y2="254" stroke="#ff9800" stroke-width="1.2"/>
+    <rect x="940" y="242" width="130" height="24" rx="5" fill="#fff3e0" stroke="#ff9800" stroke-width="0.8" filter="url(#shadow4)"/>
+    <text x="1005" y="258" text-anchor="middle" font-size="9" fill="#e65100">SPI2 SCK (LCD)</text>
+
+    <!-- More SPI + I2C bottom row -->
+    <rect x="840" y="271" width="25" height="22" rx="3" fill="#ff9800"/>
+    <text x="852" y="286" text-anchor="middle" font-size="6" fill="white" font-weight="700">13</text>
+    <line x1="840" y1="282" x2="940" y2="282" stroke="#ff9800" stroke-width="1.2"/>
+    <rect x="940" y="270" width="130" height="24" rx="5" fill="#fff3e0" stroke="#ff9800" stroke-width="0.8" filter="url(#shadow4)"/>
+    <text x="1005" y="286" text-anchor="middle" font-size="9" fill="#e65100">SPI2 MISO (LCD)</text>
+
+    <!-- Bottom pins -->
+    <!-- GPIO14 RST -->
+    <rect x="540" y="282" width="25" height="22" rx="3" fill="#ff9800"/>
+    <text x="552" y="297" text-anchor="middle" font-size="7" fill="white" font-weight="700">14</text>
+    <line x1="552" y1="282" x2="552" y2="258" stroke="#ff9800" stroke-width="1.2"/>
+    <rect x="455" y="246" width="80" height="20" rx="4" fill="#fff3e0" stroke="#ff9800" stroke-width="0.8" filter="url(#shadow4)"/>
+    <text x="495" y="260" text-anchor="middle" font-size="8" fill="#e65100">LCD RST</text>
+
+    <!-- GPIO15 DC -->
+    <rect x="585" y="282" width="25" height="22" rx="3" fill="#ff9800"/>
+    <text x="597" y="297" text-anchor="middle" font-size="7" fill="white" font-weight="700">15</text>
+    <line x1="597" y1="282" x2="597" y2="258" stroke="#ff9800" stroke-width="1.2"/>
+    <rect x="545" y="246" width="80" height="20" rx="4" fill="#fff3e0" stroke="#ff9800" stroke-width="0.8" filter="url(#shadow4)"/>
+    <text x="585" y="260" text-anchor="middle" font-size="8" fill="#e65100">LCD DC</text>
+
+    <!-- GPIO16 BL -->
+    <rect x="630" y="282" width="25" height="22" rx="3" fill="#ff9800"/>
+    <text x="642" y="297" text-anchor="middle" font-size="7" fill="white" font-weight="700">16</text>
+    <line x1="642" y1="282" x2="642" y2="258" stroke="#ff9800" stroke-width="1.2"/>
+    <rect x="635" y="246" width="80" height="20" rx="4" fill="#fff3e0" stroke="#ff9800" stroke-width="0.8" filter="url(#shadow4)"/>
+    <text x="675" y="260" text-anchor="middle" font-size="8" fill="#e65100">LCD BL</text>
+
+    <!-- GPIO17,18 Touch -->
+    <rect x="675" y="282" width="25" height="22" rx="3" fill="#00bcd4"/>
+    <text x="687" y="297" text-anchor="middle" font-size="7" fill="white" font-weight="700">17</text>
+    <line x1="687" y1="282" x2="687" y2="258" stroke="#00bcd4" stroke-width="1.2"/>
+    <rect x="648" y="246" width="90" height="20" rx="4" fill="#e0f7fa" stroke="#00bcd4" stroke-width="0.8" filter="url(#shadow4)"/>
+    <text x="693" y="260" text-anchor="middle" font-size="8" fill="#006064">Touch RST</text>
+
+    <rect x="720" y="282" width="25" height="22" rx="3" fill="#00bcd4"/>
+    <text x="732" y="297" text-anchor="middle" font-size="7" fill="white" font-weight="700">18</text>
+    <line x1="732" y1="282" x2="732" y2="258" stroke="#00bcd4" stroke-width="1.2"/>
+    <rect x="705" y="246" width="90" height="20" rx="4" fill="#e0f7fa" stroke="#00bcd4" stroke-width="0.8" filter="url(#shadow4)"/>
+    <text x="750" y="260" text-anchor="middle" font-size="8" fill="#006064">Touch INT</text>
+
+    <!-- GPIO21 I2S DIN -->
+    <rect x="465" y="75" width="25" height="22" rx="3" fill="#e91e63"/>
+    <text x="477" y="90" text-anchor="middle" font-size="7" fill="white" font-weight="700">21</text>
+    <line x1="490" y1="86" x2="580" y2="86" stroke="#e91e63" stroke-width="1.2"/>
+    <rect x="580" y="74" width="130" height="24" rx="5" fill="#fce4ec" stroke="#e91e63" stroke-width="0.8" filter="url(#shadow4)"/>
+    <text x="645" y="90" text-anchor="middle" font-size="9" fill="#880e4f">🎤 I2S DIN (麦克风)</text>
+
+    <!-- Legend row -->
+    <rect x="220" y="270" width="14" height="14" rx="2" fill="#27ae60"/>
+    <text x="240" y="281" font-size="9" fill="#666">GPIO</text>
+    <rect x="290" y="270" width="14" height="14" rx="2" fill="#00bcd4"/>
+    <text x="310" y="281" font-size="9" fill="#666">I2C</text>
+    <rect x="350" y="270" width="14" height="14" rx="2" fill="#ff9800"/>
+    <text x="370" y="281" font-size="9" fill="#666">SPI</text>
+    <rect x="410" y="270" width="14" height="14" rx="2" fill="#e91e63"/>
+    <text x="430" y="281" font-size="9" fill="#666">I2S</text>
+  </svg>
+</div>
+
+</div>
+</body>
+</html>

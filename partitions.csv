@@ -1,0 +1,9 @@
+# ESP-IDF Partition Table
+# Name,   Type, SubType, Offset,  Size,   Flags
+# 启用语音前端(esp-sr AFE/WakeNet/MultiNet)后固件约 2.8MB，原 factory 0x280000(2.5MB) 不够，
+# 扩为 0x380000(3.5MB)；model 保持 4MB（srmodels.bin 实测 3.67MB），其偏移随之移到 0x390000。
+# 8MB Flash 总用量到 0x790000，仍余 448KB。烧录时请整表重刷（分区表已变）。
+nvs,      data, nvs,     0x9000,  0x6000,
+phy_init, data, phy,     0xf000,  0x1000,
+factory,  app,  factory, 0x10000, 0x380000,
+model,    data, spiffs,  ,        0x400000,
