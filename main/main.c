@@ -222,27 +222,55 @@ static void onenet_service_handler(const char *msg_id, const char *service_id,
 static void ble_control_handler(const char *cmd)
 {
     ESP_LOGI(TAG, "BLE control: %s", cmd);
-    if (strncmp(cmd, "light:", 6) == 0) {
-        ESP_LOGW(TAG, "BLE light command ignored: no light actuator is configured");
-        ui_update_ai_reply("灯光控制未配置");
-    } else if (strncmp(cmd, "screen:", 7) == 0) {
+    if (strncmp(cmd, "screen:", 7) == 0) {
         int val = atoi(cmd + 7);
         display_backlight_set(val);
     }
 }
 
+// ---- TTS 播放门控（防自激）----
+// 本板 AFE 为单麦、无 AEC 参考通道，喇叭出声会回灌麦克风，
+// 因此 TTS 播放期间以及停播后 600ms 内忽略唤醒事件。
+// 租约：若服务端只发了 tts start 没发 stop，20s 后自动解除，
+// 避免一次异常就把唤醒永久屏蔽。
+static volatile bool       g_tts_playing    = false;
+static volatile TickType_t g_tts_start_tick = 0;
+static volatile TickType_t g_tts_stop_tick  = 0;
+
 static void voice_wake_handler(void)
 {
+    TickType_t now = xTaskGetTickCount();
+
+    if (g_tts_playing) {
+        if ((now - g_tts_start_tick) > pdMS_TO_TICKS(20000)) {
+            g_tts_playing = false;      // 租约到期，自愈
+        } else {
+            ESP_LOGI(TAG, "TTS 播放中，忽略本次唤醒");
+            return;
+        }
+    }
+    if (g_tts_stop_tick != 0 && (now - g_tts_stop_tick) < pdMS_TO_TICKS(600)) {
+        ESP_LOGI(TAG, "TTS 刚结束，忽略本次唤醒（防自激）");
+        return;
+    }
+
+    ESP_LOGI(TAG, "*** 唤醒词命中：你好小智 ***");
     esp_err_t err = xiaozhi_ai_wake_word_detected("你好小智");
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "Wake event ignored: %s", esp_err_to_name(err));
     }
 }
 
+/*
+ * 启动小智 AI。
+ * 这里只要求 Wi-Fi 就绪，**不要求语音前端就绪**：
+ * 唤醒词/麦克风属于可选能力，AFE 或 model 分区不可用时文字对话与 TTS 仍应可用，
+ * 否则一个可选功能坏掉会连带整个 AI 子系统无法启动。
+ */
 static esp_err_t start_xiaozhi(void)
 {
     if (g_xiaozhi_started) return ESP_OK;
-    if (!wifi_is_connected() || !g_voice_ready) return ESP_ERR_INVALID_STATE;
+    if (!wifi_is_connected()) return ESP_ERR_INVALID_STATE;
 
     xiaozhi_ai_config_t cfg = {
         .server_url   = NULL,
@@ -256,7 +284,8 @@ static esp_err_t start_xiaozhi(void)
         g_xiaozhi_started = true;
         xiaozhi_ai_mute_tts(false);
         ui_update_ai_status("小智连接中...");
-        ESP_LOGI(TAG, "小智AI已启动 (wake-word mode, TTS enabled)");
+        ESP_LOGI(TAG, "小智AI已启动：TTS 已解除静音，唤醒词%s",
+                 g_voice_ready ? "可用" : "不可用（仅文字对话/长按 BOOT 聆听）");
     }
     return err;
 }
@@ -327,7 +356,7 @@ static void network_watchdog_task(void *arg)
                     ESP_LOGW(TAG, "OneNET recovery start failed: %s", esp_err_to_name(err));
                 }
             }
-            if (!g_xiaozhi_started && g_voice_ready) {
+            if (!g_xiaozhi_started) {
                 esp_err_t err = start_xiaozhi();
                 if (err != ESP_OK) {
                     ESP_LOGW(TAG, "小智AI恢复启动失败: %s", esp_err_to_name(err));
@@ -359,6 +388,8 @@ static void xiaozhi_event_handler(xiaozhi_event_t event, const char *data, void 
             ui_update_ai_status("思考中...");
             break;
         case XIAOZHI_EVENT_SPEAKING:
+            // 长回复会连续来多个 speaking 事件，用它给租约续期
+            if (g_tts_playing) g_tts_start_tick = xTaskGetTickCount();
             ESP_LOGI(TAG, "小智AI: 回复中...");
             ui_update_ai_status("回复中...");
             break;
@@ -369,7 +400,12 @@ static void xiaozhi_event_handler(xiaozhi_event_t event, const char *data, void 
             }
             break;
         case XIAOZHI_EVENT_TTS_START:
+            g_tts_playing    = true;
+            g_tts_start_tick = xTaskGetTickCount();
+            break;
         case XIAOZHI_EVENT_TTS_STOP:
+            g_tts_playing   = false;
+            g_tts_stop_tick = xTaskGetTickCount();
             break;
         case XIAOZHI_EVENT_LLM_TEXT:
             if (data) {
@@ -408,7 +444,8 @@ static void chat_send_handler(const char *text)
     }
 }
 
-//按键任务 —— 短按亮屏
+//按键任务 —— 短按亮屏；长按 ≥1s 手动开始/停止聆听
+//（唤醒词依赖 model 分区与麦克风，任一失效时这是唯一的语音入口，必须保留）
 static void ai_button_task(void *arg)
 {
     gpio_config_t io_conf = {
@@ -420,14 +457,42 @@ static void ai_button_task(void *arg)
     };
     gpio_config(&io_conf);
 
-    bool last_state = true;
+    bool last_pressed = false;
+    bool long_handled = false;
+    bool listening    = false;
+    int  held_ticks   = 0;
+
     while (1) {
-        bool current = gpio_get_level(AI_BUTTON_GPIO);
-        if (last_state && !current) {  // 按下
-            ESP_LOGI(TAG, "按键按下");
-            display_backlight_set(255);  // 亮屏
+        bool pressed = (gpio_get_level(AI_BUTTON_GPIO) == 0);   // 按下拉低
+
+        if (pressed && !last_pressed) {                 // 按下沿：先亮屏
+            display_backlight_set(255);
+            held_ticks   = 0;
+            long_handled = false;
+        } else if (pressed && last_pressed) {           // 持续按住
+            if (!long_handled && ++held_ticks >= 20) {  // 20 × 50ms = 1s
+                long_handled = true;
+                if (listening) {
+                    xiaozhi_ai_stop_listen();
+                    listening = false;
+                    ESP_LOGI(TAG, "长按：停止聆听");
+                } else {
+                    esp_err_t err = xiaozhi_ai_start_listen();
+                    if (err == ESP_OK) {
+                        listening = true;
+                        ESP_LOGI(TAG, "长按：开始聆听");
+                    } else {
+                        ESP_LOGW(TAG, "长按聆听失败: %s", esp_err_to_name(err));
+                        ui_update_ai_status("小智未连接，无法聆听");
+                    }
+                }
+            }
+        } else if (!pressed && last_pressed) {          // 释放
+            long_handled = false;
+            held_ticks   = 0;
         }
-        last_state = current;
+
+        last_pressed = pressed;
         vTaskDelay(pdMS_TO_TICKS(50));
     }
 }
@@ -962,7 +1027,9 @@ void app_main(void) {
             g_voice_ready = true;
             ESP_LOGI(TAG, "Voice I/O, wake word and microphone pipeline ready");
         } else {
-            ESP_LOGW(TAG, "Voice recognition unavailable: %s", esp_err_to_name(ret));
+            ESP_LOGW(TAG, "语音前端不可用(%s)：唤醒词失效，仍可用文字对话或长按 BOOT 聆听。"
+                          "请确认已烧录 model 分区（srmodels.bin @0x390000）",
+                     esp_err_to_name(ret));
         }
     }
 #else
@@ -979,14 +1046,14 @@ void app_main(void) {
                  timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
     }
 
-    // 小智 AI：Wi-Fi 已就绪时立即启动，否则由网络守护任务恢复启动。
+    // 小智 AI：Wi-Fi 就绪就启动（与语音前端是否可用无关），否则由网络守护任务补起。
     esp_err_t xz_ret = start_xiaozhi();
     if (xz_ret != ESP_OK) {
         ESP_LOGW(TAG, "小智AI暂未启动: %s (WiFi=%s Voice=%s)",
                  esp_err_to_name(xz_ret),
                  wifi_is_connected() ? "OK" : "DOWN",
                  g_voice_ready ? "OK" : "DOWN");
-        ui_update_ai_status("小智等待网络/语音");
+        ui_update_ai_status("小智等待网络...");
     }
 
     // BLE 外设 —— 传感器数据 + 设备控制
