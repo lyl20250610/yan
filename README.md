@@ -57,5 +57,3 @@
 - `components/`：传感器、显示、触摸、Wi-Fi、BLE、MQTT 和 AI 语音模块。
 - `sdkconfig.defaults`、`dependencies.lock`：可复现构建的配置与依赖版本。
 - `block_diagram.html`、`driver_flow_diagrams.html`、`software_architecture.html`：项目架构参考文档；细节以当前源码为准。
-
-仓库不包含构建产物、下载依赖、编辑器个人配置和嵌套备份。`web-dashboard/` 在当前本地项目中仅有生成缓存，没有可发布的网页应用源码。
